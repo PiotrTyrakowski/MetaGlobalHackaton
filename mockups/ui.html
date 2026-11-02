@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MixPilot · UI mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f4f2ee; --panel:#fbfaf8; --card:#ffffff; --line:#e3dfd8; --line-strong:#cfc9bf;
+  --ink:#1f1d1a; --ink-2:#5c5750; --ink-3:#8c867d;
+  --accent:#0f766e; --accent-soft:#0f766e1a; --warn:#c2410c; --warn-soft:#c2410c14;
+  --grid:#ebe7e0; --on-accent:#fff;
+  --mono:'IBM Plex Mono',ui-monospace,monospace; --sans:'IBM Plex Sans',system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#141312; --panel:#1b1a18; --card:#22201e; --line:#33302c; --line-strong:#45413b;
+  --ink:#eeebe6; --ink-2:#b3ada4; --ink-3:#857f76;
+  --accent:#2dd4bf; --accent-soft:#2dd4bf1f; --warn:#fb923c; --warn-soft:#fb923c1a;
+  --grid:#2a2825; --on-accent:#0b1312;
+}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:14px/1.5 var(--sans);display:flex;flex-direction:column}
+button{font:inherit;color:inherit;cursor:pointer}
+.mono{font-family:var(--mono)}
+
+.top{display:flex;align-items:center;gap:16px;padding:0 18px;height:50px;border-bottom:1px solid var(--line);background:var(--panel)}
+.logo{display:flex;align-items:center;gap:8px;font-weight:600}
+.logo i{width:20px;height:20px;border-radius:6px;background:var(--accent)}
+.proj{color:var(--ink-2);padding-left:16px;border-left:1px solid var(--line)}
+.nav{display:flex;gap:4px;margin-left:auto;height:100%}
+.nav button{border:0;background:none;padding:0 14px;color:var(--ink-3);border-bottom:2px solid transparent}
+.nav button.on{color:var(--ink);border-bottom-color:var(--accent)}
+
+.view{flex:1;min-height:0;display:none}
+.view.on{display:grid}
+#project{grid-template-columns:minmax(360px,40%) 1fr}
+.chat{display:flex;flex-direction:column;border-right:1px solid var(--line);min-height:0;background:var(--panel)}
+.stream{flex:1;overflow:auto;padding:22px;display:flex;flex-direction:column;gap:16px}
+.user{align-self:flex-end;background:var(--card);border:1px solid var(--line);border-radius:12px 12px 4px 12px;padding:10px 12px;max-width:85%}
+.agent{display:flex;flex-direction:column;gap:8px}
+.agent p{margin:0}
+.files{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.file{font-size:12px;padding:3px 8px;border:1px solid var(--line);border-radius:6px;color:var(--ink-2)}
+.art{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--line-strong);border-radius:10px;background:var(--card);text-align:left;width:100%}
+.art:hover,.art.on{border-color:var(--accent)}
+.art .t{font-weight:500}
+.art .s{font-size:12px;color:var(--ink-3)}
+.art .go{margin-left:auto;color:var(--ink-3);font-size:12px}
+.find{border-radius:10px;padding:10px 12px;border:1px solid}
+.find.new{border-color:var(--accent);background:var(--accent-soft)}
+.find.miss{border-color:var(--warn);background:var(--warn-soft)}
+.find .h{font-weight:600;font-size:13px}
+.find.new .h{color:var(--accent)} .find.miss .h{color:var(--warn)}
+.find .d{font-size:13px;color:var(--ink-2)}
+.btn{background:var(--accent);color:var(--on-accent);border:0;border-radius:8px;padding:8px 16px;font-weight:500;align-self:flex-start}
+.btn.ghost{background:none;border:1px solid var(--line-strong);color:var(--ink)}
+.composer{margin:0 16px 16px;border:1px solid var(--line-strong);border-radius:12px;background:var(--card);padding:10px 12px;display:flex;gap:8px;align-items:center}
+.composer input{flex:1;border:0;outline:0;background:transparent;color:var(--ink);font:14px var(--sans)}
+
+.pane{display:flex;flex-direction:column;min-height:0}
+.ptabs{display:flex;gap:2px;padding:8px 14px 0;border-bottom:1px solid var(--line)}
+.ptab{border:1px solid transparent;border-bottom:0;background:none;padding:7px 14px;border-radius:8px 8px 0 0;color:var(--ink-3)}
+.ptab.on{background:var(--panel);border-color:var(--line);color:var(--ink);margin-bottom:-1px}
+.pbody{flex:1;overflow:auto;padding:24px 28px 40px;background:var(--panel)}
+.pbody h2{margin:0 0 4px;font-size:18px;font-weight:600}
+.lead{color:var(--ink-2);margin:0 0 20px;max-width:680px}
+.card{border:1px solid var(--line);border-radius:12px;background:var(--card);padding:14px 18px;margin-bottom:14px}
+.big{display:flex;gap:28px;margin-bottom:18px}
+.big .n{font-size:28px;font-weight:600;letter-spacing:-.5px}
+.big .l{font-size:12px;color:var(--ink-3)}
+table{width:100%;border-collapse:collapse}
+th{font-weight:500;color:var(--ink-3);text-align:left;font-size:12px;padding:8px;border-bottom:1px solid var(--line)}
+td{padding:9px 8px;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-family:var(--mono);font-size:13px}
+tr.hl-new td{background:var(--accent-soft)}
+tr.hl-miss td{background:var(--warn-soft)}
+tr.win td{background:var(--accent-soft);font-weight:500}
+.bar{height:8px;border-radius:9px;background:var(--grid);overflow:hidden}
+.bar span{display:block;height:100%;background:var(--accent)}
+.tag{display:inline-block;font-size:11.5px;padding:1px 7px;border-radius:5px;font-weight:500}
+.tag.new{color:var(--accent);background:var(--accent-soft)}
+.tag.miss{color:var(--warn);background:var(--warn-soft)}
+.tag.base{color:var(--ink-2);border:1px solid var(--line)}
+svg text{font-family:var(--sans)}
+.legend{display:flex;gap:16px;font-size:12px;color:var(--ink-2);margin-top:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:9px;margin-right:5px;vertical-align:-1px}
+
+#models{padding:28px;overflow:auto}
+#models.on{display:block}
+#models .wrap{max-width:900px;margin:0 auto}
+.mock{position:fixed;bottom:10px;right:14px;font-size:11px;color:var(--ink-3)}
+@media (max-width:900px){#project.on{display:block;overflow:auto}.chat{border-right:0;border-bottom:1px solid var(--line)}.stream{overflow:visible}.pbody{padding:20px 16px}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="logo"><i></i>MixPilot</div>
+  <div class="proj">Riverside Ready-Mix</div>
+  <nav class="nav"><button class="on" data-v="project">Project</button><button data-v="models">Models</button></nav>
+</header>
+
+<!-- ============ PROJECT ============ -->
+<main class="view on" id="project">
+  <section class="chat">
+    <div class="stream">
+
+      <div class="user">Here are our lab files.
+        <div class="files"><span class="file">mix_designs.xlsx</span><span class="file">cylinder_breaks.xlsx</span><span class="file">daily_QC.xlsx</span></div>
+      </div>
+
+      <div class="agent">
+        <p>I read 46 mixes and 612 strength results and converted them to BOxCrete's format.</p>
+        <button class="art" data-a="data"><span><div class="t">Data</div><div class="s">model inputs and coverage</div></span><span class="go">Open ›</span></button>
+        <p>Your files have two inputs that Meta's model doesn't use:</p>
+        <div class="find new"><div class="h">Air content: ready to use</div><div class="d">In daily_QC.xlsx for all 46 mixes. Air lowers strength, so I'll add it as a model input.</div></div>
+        <div class="find miss"><div class="h">Cement strength: only 40% recorded</div><div class="d">From mill certificates. On mixes that have it, error drops about 9%. Record it for every cement delivery and the model gets better.</div></div>
+        <button class="btn">Train model</button>
+      </div>
+
+      <div class="agent">
+        <p>I trained 4 setups on your data. Best: Meta's model with tuned settings plus air content. 28-day error <b>598 psi</b>, down from <b>742 psi</b> with Meta's default setup.</p>
+        <button class="art" data-a="training"><span><div class="t">Training</div><div class="s">4 setups · best −19%</div></span><span class="go">Open ›</span></button>
+        <p>Saved as <b>model v1</b>. Here is what it gives you:</p>
+        <button class="art" data-a="results"><span><div class="t">Results</div><div class="s">less CO₂ at the same strength</div></span><span class="go">Open ›</span></button>
+      </div>
+
+    </div>
+    <div class="composer"><input placeholder="Ask about your mixes, or add files…"><button class="btn">Send</button></div>
+  </section>
+
+  <section class="pane">
+    <nav class="ptabs" id="tabs"></nav>
+    <div class="pbody" id="pbody"></div>
+  </section>
+</main>
+
+<!-- ============ MODELS ============ -->
+<main class="view" id="models"><div class="wrap">
+  <h2 style="margin:0 0 4px;font-size:20px">Models</h2>
+  <p class="lead">Models trained on Riverside's data. Use one in chat to predict a mix, or retrain with new results.</p>
+  <div class="card" style="padding:4px 10px"><table>
+    <tr><th>Version</th><th>Trained</th><th>Inputs</th><th class="num">Mixes</th><th class="num">28-day error</th><th></th></tr>
+    <tr class="win"><td>v1 <span class="tag new">active</span></td><td>Nov 2, 2026</td><td>Meta's 10 + air content</td><td class="num">46</td><td class="num">598 psi</td><td style="text-align:right"><button class="btn" style="padding:5px 12px">Use in chat</button></td></tr>
+  </table></div>
+  <button class="btn ghost">Add new results and retrain</button>
+</div></main>
+
+<div class="mock">UI mockup · synthetic data</div>
+
+<script>
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const gauss = () => { let u = 0, v = 0; while (!u) u = rnd(); while (!v) v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+
+const inputs = [
+  ['Cement', 'mix_designs.xlsx', 1], ['Fly ash', 'mix_designs.xlsx', 1], ['Slag', 'mix_designs.xlsx', 1],
+  ['Water', 'mix_designs.xlsx', 1], ['Superplasticizer (HRWR)', 'mix_designs.xlsx', 1],
+  ['Fine aggregate', 'mix_designs.xlsx', 1], ['Coarse aggregate', 'mix_designs.xlsx', 1],
+  ['Curing temperature', 'daily_QC.xlsx', 1], ['Age at test', 'cylinder_breaks.xlsx', 1],
+  ['Air content', 'daily_QC.xlsx', 1, 'new'], ['Cement strength (mill cert)', 'daily_QC.xlsx', .4, 'miss'],
+];
+
+const A = {
+  data: { t: 'Data', render: () => `
+    <h2>Model inputs</h2>
+    <p class="lead">Every input the model is trained on, where it came from, and how many of your 46 mixes have it.</p>
+    <div class="card" style="padding:4px 10px"><table>
+      <tr><th>Input</th><th>From</th><th style="width:30%">Coverage</th><th class="num"></th></tr>
+      ${inputs.map(([n, f, c, k]) => `<tr class="${k ? 'hl-' + k : ''}"><td>${n} ${k === 'new' ? '<span class="tag new">new · added</span>' : k === 'miss' ? '<span class="tag miss">collect more</span>' : ''}</td><td style="color:var(--ink-3);font-size:12.5px">${f}</td><td><div class="bar"><span style="width:${c * 100}%;${k === 'miss' ? 'background:var(--warn)' : ''}"></span></div></td><td class="num">${Math.round(c * 46)}/46</td></tr>`).join('')}
+    </table></div>` },
+
+  training: { t: 'Training', render: () => {
+    const rows = [
+      ["Meta's default setup", 742, 'base'],
+      ['+ tuned settings', 701],
+      ['+ air content', 638],
+      ['+ tuned settings + air content', 598, 'win'],
+    ];
+    return `<h2>Training on your data</h2>
+    <p class="lead">Each setup is trained on your 46 mixes and scored on mixes it never saw. Lower error is better.</p>
+    <div class="big"><div><div class="n">598 <span style="font-size:14px;font-weight:400">psi</span></div><div class="l">28-day error, best</div></div><div><div class="n" style="color:var(--accent)">−19%</div><div class="l">vs Meta's default setup</div></div></div>
+    <div class="card" style="padding:4px 10px"><table>
+      <tr><th>Setup</th><th class="num">28-day error</th><th style="width:40%"></th></tr>
+      ${rows.map(([n, e, k]) => `<tr class="${k === 'win' ? 'win' : ''}"><td>${n} ${k === 'base' ? '<span class="tag base">baseline</span>' : k === 'win' ? '<span class="tag new">best</span>' : ''}</td><td class="num">${e} psi</td><td><div class="bar"><span style="width:${e / 800 * 100}%;${k === 'win' ? '' : 'opacity:.4'}"></span></div></td></tr>`).join('')}
+    </table></div>
+    <p style="font-size:12.5px;color:var(--ink-3)">Tuned settings: time-gate τ 0.10 → 0.20, loss mix 0.5 → 0.3.</p>`;
+  }},
+
+  results: { t: 'Results', render: () => {
+    seed = 11;
+    const mixes = Array.from({ length: 46 }, () => { const s = Math.min(.55, Math.max(0, .22 + gauss() * .12)); return { g: 330 - s * 260 + gauss() * 20, s: 4300 + (.3 - Math.abs(s - .3)) * 3200 + gauss() * 420 }; });
+    const prop = [['P-1', 168, 5600], ['P-2', 184, 6150], ['P-3', 205, 6700]];
+    const W = 640, H = 340, m = { l: 56, r: 20, t: 30, b: 40 };
+    const X = v => m.l + (v - 120) / 300 * (W - m.l - m.r), Y = v => H - m.b - (v - 2500) / 5500 * (H - m.t - m.b);
+    let g = `<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+    [3000, 4000, 5000, 6000, 7000, 8000].forEach(t => g += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(t)}" y2="${Y(t)}" stroke="${css('--grid')}"/><text x="${m.l - 8}" y="${Y(t) + 4}" text-anchor="end" font-size="11" fill="${css('--ink-3')}">${t.toLocaleString()}</text>`);
+    [150, 200, 250, 300, 350, 400].forEach(t => g += `<text x="${X(t)}" y="${H - m.b + 16}" text-anchor="middle" font-size="11" fill="${css('--ink-3')}">${t}</text>`);
+    g += `<text x="${(m.l + W - m.r) / 2}" y="${H - 4}" text-anchor="middle" font-size="11.5" fill="${css('--ink-2')}">CO₂ (kg/m³) · lower is better</text><text x="12" y="${m.t - 10}" font-size="11.5" fill="${css('--ink-2')}">28-day strength (psi)</text>`;
+    mixes.forEach(p => g += `<circle cx="${X(p.g)}" cy="${Y(p.s)}" r="4" fill="${css('--ink-3')}" opacity=".45"/>`);
+    prop.forEach(([n, x, y]) => g += `<circle cx="${X(x)}" cy="${Y(y)}" r="6" fill="${css('--accent')}"/><text x="${X(x) + 9}" y="${Y(y) + 4}" font-size="12" font-weight="500" fill="${css('--ink')}">${n}</text>`);
+    g += `</svg>`;
+    return `<h2>What model v1 gives you</h2>
+    <p class="lead">Grey dots are your current mixes. Teal are mixes the model expects to reach the same strength with about <b>35% less CO₂</b>. Test these next.</p>
+    <div class="card">${g}<div class="legend"><span><i style="background:${css('--ink-3')};opacity:.45"></i>your mixes</span><span><i style="background:${css('--accent')}"></i>proposed</span></div></div>
+    <div class="card" style="padding:4px 10px"><table>
+      <tr><th>Mix</th><th class="num">Cement</th><th class="num">Slag</th><th class="num">Water</th><th class="num">Predicted 28-day</th><th class="num">CO₂</th></tr>
+      ${[['P-1', 452, 260, 263, '5,600 ± 840', 168], ['P-2', 489, 280, 266, '6,150 ± 920', 184], ['P-3', 536, 239, 270, '6,700 ± 1,020', 205]].map(r => `<tr><td class="mono">${r[0]}</td><td class="num">${r[1]}</td><td class="num">${r[2]}</td><td class="num">${r[3]}</td><td class="num">${r[4]}</td><td class="num">${r[5]}</td></tr>`).join('')}
+    </table></div>
+    <p style="font-size:12.5px;color:var(--ink-3)">Quantities in lb/yd³, air 6%. Predictions are lab-cured; your QC engineer signs off.</p>`;
+  }},
+};
+
+const order = ['data', 'training', 'results'];
+let cur = 'training';
+function show(k) {
+  cur = k;
+  document.getElementById('tabs').innerHTML = order.map(o => `<button class="ptab ${o === k ? 'on' : ''}" data-a="${o}">${A[o].t}</button>`).join('');
+  document.getElementById('pbody').innerHTML = A[k].render();
+  document.querySelectorAll('.art').forEach(b => b.classList.toggle('on', b.dataset.a === k));
+}
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-a]'); if (a) show(a.dataset.a);
+  const v = e.target.closest('[data-v]');
+  if (v) { document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('on', b === v)); document.querySelectorAll('.view').forEach(x => x.classList.toggle('on', x.id === v.dataset.v)); }
+});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => show(cur));
+show(cur);
+</script>
+</body>
+</html>
