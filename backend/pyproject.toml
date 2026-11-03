@@ -1,0 +1,24 @@
+[project]
+name = "mixpilot"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "boxcrete",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "openai>=1.50",
+    "pandas>=2.2",
+    "openpyxl>=3.1",
+    "python-dotenv>=1.0",
+    "sse-starlette>=2.1",
+    "python-multipart>=0.0.33",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "parameterized>=0.9"]
+
+[tool.uv.sources]
+boxcrete = { path = "vendor/SustainableConcrete", editable = true }
+
+[tool.uv]
+package = false

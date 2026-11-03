@@ -1,0 +1,9 @@
+.env
+*.env
+.venv/
+__pycache__/
+node_modules/
+.next/
+backend/models/
+backend/demo_data/automl_last.json
+backend/uploads/
