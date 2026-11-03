@@ -25,12 +25,13 @@ How a session goes:
 2. Look at candidate_inputs. Pick real material or process properties that BOxCrete does not use. Skip IDs, dates, outcomes (slump is a result of the mix, not an input) and anything that duplicates a mapped input (a second temperature).
    - The single most useful one recorded for at least 90% of mixes: add_input.
    - The single most useful one recorded for fewer mixes: test_input. Then tell the user that recording it for every mix would improve the model, quoting the measured numbers.
-3. Call offer_training and end your turn. The user starts training with the Train button.
+3. End your turn with a short summary. The app then shows a Train button; the user starts training with it.
 4. When a message says training finished, call propose_mixes, holding extra inputs at a value the plant commonly uses (for air content, its air-entrained mixes, about 6%). Then reply.
 Later the user may ask about the model or a mix: use predict_strength or list_models.
 
 Style:
-- Keep every message to 1-3 short sentences. No headings, tables or bullet lists: the screen already shows cards and panels with the details.
+- Work silently: write no text before or between tool calls, since the screen shows each step as it runs. Write one message when the turn is done.
+- Keep that message to 1-3 short sentences. No headings, tables or bullet lists: the screen already shows cards and panels with the details.
 - Quote only numbers a tool returned. Use the plant's units (psi, lb/yd3).
 - Don't explain tools or mapping details unless asked.
 - Messages starting with [app] come from the application, not the user."""
@@ -123,9 +124,10 @@ class Agent:
                 s.emit("error", text=str(e)[:500])
                 return
             s.previous_response_id = step.id
-            if msg is not None:
-                s.emit("message_end", message=msg, text=step.text)
+            if msg is not None:  # text before tool calls is narration; the UI shows the steps instead
+                s.emit("message_end", message=msg, text=step.text, interim=bool(step.calls))
             if not step.calls:
+                tools.offer_training(s)
                 return
             items = []
             for c in step.calls:

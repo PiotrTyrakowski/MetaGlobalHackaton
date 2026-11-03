@@ -153,6 +153,7 @@ def prepare_data(s: Session, mix_id: list[dict], fields: list[dict], exclude: li
     if hrwr_density:
         s.mapping["hrwr_density"] = hrwr_density
     s.accepted, s.tested = [], {}
+    s.ready_to_train = True
     df, report = _rebuild(s)
     _data_artifact(s, df, report)
     return {
@@ -171,6 +172,7 @@ def add_input(s: Session, name: str, file: str, column: str) -> dict:
                         "use test_input for inputs that are not complete")
     if name not in s.accepted:
         s.accepted.append(name)
+    s.ready_to_train = True
     s.emit("card", kind="input_ready", **info, file=file, column=column)
     _data_artifact(s, df, report)
     return {**info, "used_in_training": True}
@@ -195,14 +197,6 @@ def test_input(s: Session, name: str, file: str, column: str) -> dict:
             "note": "errors are 28-day RMSE in psi, measured only on the mixes that record this input"}
 
 
-def offer_training(s: Session) -> dict:
-    if s.mapping is None:
-        raise ToolError("call prepare_data first")
-    s.emit("train_button", inputs=s.accepted, setups=18 if s.accepted else 9)
-    return {"shown": True, "extra_inputs": s.accepted,
-            "note": "The Train button is on screen. End your turn; training starts when the user clicks it."}
-
-
 def propose_mixes(s: Session, fixed: dict | None = None, model: str | None = None) -> dict:
     model_dir, entry = _model_dir(model or s.model)
     fixed = {k: float(v) for k, v in (fixed or {}).items() if k in entry["extra_inputs"]}
@@ -218,8 +212,15 @@ def propose_mixes(s: Session, fixed: dict | None = None, model: str | None = Non
     }
 
 
+def _us_mix(base: dict, hrwr_oz: float, extras: list[str]) -> dict:
+    """A mix row from BOxCrete's units in the plant's units."""
+    us = {k: base[v] / units.LB_PER_YD3_TO_KG_PER_M3 for k, v in US_FIELDS.items()
+          if k not in ("HRWR (oz/cwt)", "Temp (F)")}
+    return us | {"HRWR (oz/cwt)": hrwr_oz, "Temp (F)": base["Temp (C)"] * 9 / 5 + 32} | {e: base[e] for e in extras}
+
+
 def predict_strength(s: Session, ages: list[float], mix_name: str | None = None, mix: dict | None = None,
-                     model: str | None = None) -> dict:
+                     change: dict | None = None, model: str | None = None) -> dict:
     model_dir, entry = _model_dir(model or s.model)
     data = pd.read_csv(model_dir / "data.csv")
     extras = entry["extra_inputs"]
@@ -236,7 +237,15 @@ def predict_strength(s: Session, ages: list[float], mix_name: str | None = None,
             raise ToolError(f"without mix_name, give every field of mix: missing {needed}")
 
     hrwr_oz = units.hrwr_kg_m3_to_oz_cwt(base["HRWR (kg/m3)"], sum(base[c] for c in ("Cement (kg/m3)", "Fly Ash (kg/m3)", "Slag (kg/m3)")))
+    now = _us_mix(base, hrwr_oz, extras)
+    for key, delta in (change or {}).items():
+        if key not in now:
+            raise ToolError(f"unknown field {key!r}; use {list(now)}")
+        mix[key] = mix.get(key, now[key]) + float(delta)
     for key, value in mix.items():
+        if float(value) < 0 and key != "Temp (F)":
+            raise ToolError(f"{key} would be {float(value):.0f}: mix takes amounts, not differences; "
+                            "use change for differences")
         if key in US_FIELDS and key not in ("HRWR (oz/cwt)", "Temp (F)"):
             base[US_FIELDS[key]] = units.mass_to_kg_m3(float(value), "lb/yd3")
         elif key == "Temp (F)":
@@ -256,13 +265,10 @@ def predict_strength(s: Session, ages: list[float], mix_name: str | None = None,
     if mix_name and not mix:
         m = data[data["Mix Name"] == normalize_mix_id(mix_name)]
         measured = dict(zip(m["Time"].astype(float), m["Strength (Mean)"]))
-    us_mix = {k: round(base[v] / units.LB_PER_YD3_TO_KG_PER_M3) for k, v in US_FIELDS.items()
-              if k not in ("HRWR (oz/cwt)", "Temp (F)")}
-    us_mix |= {"HRWR (oz/cwt)": round(hrwr_oz, 1), "Temp (F)": round(base["Temp (C)"] * 9 / 5 + 32)}
-    us_mix |= {e: round(base[e], 2) for e in extras}
     return {
         "model": entry["version"],
-        "mix": us_mix,
+        "mix": {k: round(v, 1 if k == "HRWR (oz/cwt)" else 2 if k in extras else None)
+                for k, v in _us_mix(base, hrwr_oz, extras).items()},
         "predictions": [{"age_days": a, "psi": p["mean_psi"], "plus_minus": p["sd_psi"],
                          **({"measured_psi": measured[float(a)]} if float(a) in measured else {})}
                         for a, p in zip(ages, preds)],
@@ -274,6 +280,12 @@ def list_models(s: Session) -> dict:
 
 
 # --------------------------------------------------------------------------- training (Train button)
+
+def offer_training(s: Session) -> None:
+    """Show the Train button after a turn that left prepared, untrained data."""
+    if s.mapping is not None and s.ready_to_train:
+        s.emit("train_button", inputs=s.accepted, setups=18 if s.accepted else 9)
+
 
 def train(s: Session) -> dict:
     """AutoML over setups, then fit and save the winner. Runs when the user clicks Train."""
@@ -293,6 +305,7 @@ def train(s: Session) -> dict:
     entry = automl.save_model(s.dataset, res["best"], MODELS_DIR, res["best"],
                               baseline_rmse_28d=res["baseline"]["rmse_28d"], gain=res["gain"])
     s.model = entry["version"]
+    s.ready_to_train = False
 
     def is_best(r):
         return r["extra"] == res["best"]["extra"] and r["settings"] == res["best"]["settings"]
@@ -314,7 +327,6 @@ TOOLS = {
     "prepare_data": prepare_data,
     "add_input": add_input,
     "test_input": test_input,
-    "offer_training": offer_training,
     "propose_mixes": propose_mixes,
     "predict_strength": predict_strength,
     "list_models": list_models,
@@ -325,7 +337,6 @@ LABELS = {
     "prepare_data": "Building the dataset",
     "add_input": "Adding input",
     "test_input": "Testing input",
-    "offer_training": "Ready to train",
     "propose_mixes": "Screening new mixes",
     "predict_strength": "Predicting strength",
     "list_models": "Looking up models",
@@ -336,7 +347,8 @@ _SOURCE = {"file": {"type": "string", "description": "file name, e.g. mix_design
 _INPUT_ARGS = {
     "type": "object",
     "properties": {
-        "name": {"type": "string", "description": "label with unit in brackets, e.g. 'Air (%)'"},
+        "name": {"type": "string", "description": ("short plain-language name with unit in brackets, "
+                                                    "e.g. 'Air (%)' or 'Cement strength (psi)', not the column header")},
         **_SOURCE,
     },
     "required": ["name", "file", "column"],
@@ -380,9 +392,6 @@ SCHEMAS = [
                      "the mixes that have it (two cross-validated fits, about 20 s). It is not used for training. "
                      "Shows the user a card."),
      "parameters": _INPUT_ARGS},
-    {"type": "function", "name": "offer_training",
-     "description": "Show the Train button once the data is ready. Training runs AutoML when the user clicks it.",
-     "parameters": {"type": "object", "properties": {}}},
     {"type": "function", "name": "propose_mixes",
      "description": ("With a trained model: screen candidate mixes and return ones predicted to reach the plant's "
                      "usual strength classes with less CO2 than its existing mixes. Updates the Results panel."),
@@ -392,12 +401,16 @@ SCHEMAS = [
          "model": {"type": "string", "description": "model version; default the latest"}}}},
     {"type": "function", "name": "predict_strength",
      "description": ("Predict strength with a trained model at given ages. Start from an existing mix "
-                     "(mix_name) and optionally change fields, or give a whole mix. Fields use the plant's units: "
+                     "(mix_name) and set fields (mix) or shift them (change), or give a whole mix. "
+                     "Fields use the plant's units: "
                      + ", ".join(US_FIELDS) + ", plus the model's extra inputs (e.g. 'Air (%)')."),
      "parameters": {"type": "object", "properties": {
          "ages": {"type": "array", "items": {"type": "number"}, "description": "ages in days, at most 28"},
          "mix_name": {"type": "string", "description": "existing mix to start from, e.g. R-101"},
-         "mix": {"type": "object", "description": "field -> value to set", "additionalProperties": {"type": "number"}},
+         "mix": {"type": "object", "description": "field -> new amount, e.g. {\"Cement (lb/yd3)\": 400}",
+                 "additionalProperties": {"type": "number"}},
+         "change": {"type": "object", "description": "field -> amount to add, negative to remove, "
+                    "e.g. {\"Cement (lb/yd3)\": -50}", "additionalProperties": {"type": "number"}},
          "model": {"type": "string"}},
          "required": ["ages"]}},
     {"type": "function", "name": "list_models",

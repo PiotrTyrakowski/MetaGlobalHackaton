@@ -25,6 +25,7 @@ class Session:
     mapping: dict | None = None  # base mapping from prepare_data, plus extra_inputs
     accepted: list[str] = field(default_factory=list)  # extra inputs used for training
     tested: dict[str, dict] = field(default_factory=dict)  # partial inputs -> measured gain
+    ready_to_train: bool = False  # prepared data that has not been trained on yet
     model: str | None = None  # model version this conversation works with
     previous_response_id: str | None = None
     pending_input: list[dict] = field(default_factory=list)  # tool results a failed call didn't deliver
