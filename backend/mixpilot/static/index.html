@@ -30,7 +30,6 @@ button:disabled{cursor:default;opacity:.55}
 .top{display:flex;align-items:center;gap:16px;padding:0 18px;height:50px;border-bottom:1px solid var(--line);background:var(--panel)}
 .logo{display:flex;align-items:center;gap:8px;font-weight:600}
 .logo i{width:20px;height:20px;border-radius:6px;background:var(--accent)}
-.proj{color:var(--ink-2);padding-left:16px;border-left:1px solid var(--line)}
 .nav{display:flex;gap:4px;margin-left:auto;height:100%}
 .nav button{border:0;background:none;padding:0 14px;color:var(--ink-3);border-bottom:2px solid transparent}
 .nav button.on{color:var(--ink);border-bottom-color:var(--accent)}
@@ -119,7 +118,6 @@ svg text{font-family:var(--sans)}
 
 <header class="top">
   <div class="logo"><i></i>MixPilot</div>
-  <div class="proj">Riverside Ready-Mix</div>
   <nav class="nav"><button class="on" data-v="project">Project</button><button data-v="models">Models</button></nav>
 </header>
 
@@ -141,7 +139,7 @@ svg text{font-family:var(--sans)}
 
 <main class="view" id="models"><div class="wrap">
   <h2 style="margin:0 0 4px;font-size:20px">Models</h2>
-  <p class="lead">Models trained on Riverside's data. Use one in chat to predict a mix.</p>
+  <p class="lead">Models trained on your data. Use one in chat to predict a mix.</p>
   <div id="modelList"></div>
 </div></main>
 
@@ -160,8 +158,8 @@ const NAMES = {
   'HRWR (kg/m3)': 'Superplasticizer (HRWR)', 'Fine Aggregate (kg/m3)': 'Fine aggregate',
   'Coarse Aggregates (kg/m3)': 'Coarse aggregate', 'Temp (C)': 'Curing temperature',
 };
-const FRIENDLY = { 'Air': 'Air content', 'Cement Strength': 'Cement strength' };
-const label = name => NAMES[name] || FRIENDLY[name.replace(/ \(.*\)$/, '')] || name.replace(/ \(.*\)$/, '');
+const FRIENDLY = { 'air': 'Air content', 'site water': 'Water added on site' };
+const label = name => NAMES[name] || FRIENDLY[name.replace(/ \(.*\)$/, '').toLowerCase()] || name.replace(/ \(.*\)$/, '');
 
 // ------------------------------------------------------------------ state
 let sid = null, es = null, lastSeq = -1, block = null, busy = false, isDemo = false;

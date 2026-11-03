@@ -353,7 +353,7 @@ _INPUT_ARGS = {
     "type": "object",
     "properties": {
         "name": {"type": "string", "description": ("short plain-language name with unit in brackets, "
-                                                    "e.g. 'Air (%)' or 'Cement strength (psi)', not the column header")},
+                                                    "e.g. 'Air (%)' or 'Site water (gal/yd3)', not the column header")},
         **_SOURCE,
     },
     "required": ["name", "file", "column"],

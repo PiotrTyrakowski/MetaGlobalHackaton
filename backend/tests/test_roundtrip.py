@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 
 from mixpilot.prepare import build_dataset
-from mixpilot.units import MPA_TO_PSI
 
 ROOT = Path(__file__).resolve().parents[1]
 DEMO = ROOT / "data" / "demo"
@@ -22,13 +21,12 @@ def build():
 def test_roundtrip_matches_truth():
     df, report = build()
     truth = pd.read_csv(ROOT / "data" / "plant_truth.csv")
-    truth["Cement Strength (psi)"] = truth.pop("Cement Strength (MPa)") * MPA_TO_PSI
     m = df.merge(truth, on=["Mix Name", "Time"], suffixes=("", "_true"))
     assert len(m) == len(truth) == len(df)
     tol = {
         "Cement (kg/m3)": 0.5, "Fly Ash (kg/m3)": 0.5, "Slag (kg/m3)": 0.5, "Water (kg/m3)": 0.5,
         "HRWR (kg/m3)": 0.05, "Fine Aggregate (kg/m3)": 0.5, "Coarse Aggregates (kg/m3)": 0.5,
-        "Temp (C)": 0.05, "Air (%)": 0.05, "Cement Strength (psi)": 1, "Strength (Mean)": 1, "Strength (Std)": 1,
+        "Temp (C)": 0.05, "Air (%)": 0.05, "Site Water (gal/yd3)": 0.06, "Strength (Mean)": 1, "Strength (Std)": 1,
     }
     for col, t in tol.items():
         err = (m[col] - m[f"{col}_true"]).abs()

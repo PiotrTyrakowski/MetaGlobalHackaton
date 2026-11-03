@@ -56,7 +56,7 @@ def candidate_inputs(files: list[str | Path], mapping: dict) -> list[dict]:
     """Numeric columns the mapping doesn't use, summarised per mix.
 
     The agent decides which are real material/process properties (air
-    content, cement mill-cert strength) and which are not inputs at all
+    content, water added on site) and which are not inputs at all
     (ticket numbers, slump, which is an outcome, dates).
     """
     used = {(s["file"], s["column"]) for s in mapping["fields"].values()}
