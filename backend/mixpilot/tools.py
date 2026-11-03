@@ -64,6 +64,9 @@ def _data_artifact(s: Session, df: pd.DataFrame, report: dict) -> None:
         r["status"] = "new" if r["input"] in s.accepted else "incomplete" if r["input"] in s.tested else None
         src = sources.get(r["input"])
         r["source"] = src and {"file": src["file"], "column": src["column"]}
+    strength, age = s.mapping["fields"]["Strength"], s.mapping["fields"]["Time"]
+    curves = [{"mix": mix, "points": [[float(a), round(float(v))] for a, v in zip(g["Time"], g["Strength (Mean)"])]}
+              for mix, g in df.sort_values("Time").groupby("Mix Name", sort=False)]
     s.emit("artifact", name="data", data={
         "mixes": report["mixes"],
         "rows": report["rows"],
@@ -73,6 +76,8 @@ def _data_artifact(s: Session, df: pd.DataFrame, report: dict) -> None:
         "dropped": {k: v for k, v in report["dropped"].items() if v},
         "conversions": report["conversions"],
         "coverage": rows,
+        "output": {"source": {"file": strength["file"], "column": strength["column"]},
+                   "age": {"file": age["file"], "column": age["column"]}, "curves": curves},
     })
 
 
