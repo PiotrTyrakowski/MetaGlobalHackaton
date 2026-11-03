@@ -1,4 +1,4 @@
-# MixPilot: plan (v0.4, 2026-11-02)
+# MixPilot: plan (v0.5, 2026-11-03)
 
 Working name. An agent built on Meta Muse Spark that takes a concrete plant's Excel files, gets the data ready with the user, then retrains and tunes Meta's BOxCrete model on that plant's data. The trained model stays saved so the plant can keep using it.
 
@@ -21,7 +21,7 @@ Background research (BOxCrete, Quadrel, Meta API): https://claude.ai/artifact/JU
 2. **Prepare (back and forth with the agent):**
    - The agent maps the columns to BOxCrete's schema and converts units.
    - It finds **one new useful input**: **air content (%)**, recorded for 100% of mixes. BOxCrete doesn't have it. Each 1% of air costs roughly 5% of strength, so it explains part of the scatter. The agent says: "we can use this."
-   - It finds **one useful input that is incomplete**: **cement strength from the mill certificate (MPa)**, recorded for only 40% of mixes. It varies by cement delivery. The agent says: "if you recorded this for every batch, the model would get better," with an estimate measured on the 40% that has it.
+   - It finds **one useful input that is incomplete**: **water added on site (gal/yd³)**, logged for only 20 of 46 mixes. Drivers add it to bring the slump back, and each gallon per yd³ costs roughly 6% of strength (about 300 psi). The agent says: "if you logged this for every truck, the model would get better," with an estimate measured on the mixes that have it.
 3. **Train (button):** an AutoML run on the plant's data. The **baseline is Meta's default setup retrained on the plant's data**; we always retrain, so Meta's untrained model is not shown. Leaderboard rows:
    - Meta default, retrained (baseline);
    - plus tuned hyperparameters (`GATE_TAU`, prior σ, `mll_weight`);
@@ -99,7 +99,7 @@ The code is in `backend/spike/`. BOxCrete is vendored in `backend/boxcrete/` and
 | + air content | 488 | 382 |
 | + air + tuned (τ 0.20, mll 0.8) | **438** | **377** |
 
-Cement strength, scored only on the mixes that record it (~20 per plant):
+Cement strength (the first choice of incomplete input, since replaced by water added on site), scored only on the mixes that record it (~20 per plant):
 
 | Setup | Plant A | Plant B |
 |---|---|---|
@@ -124,14 +124,14 @@ Cement strength, scored only on the mixes that record it (~20 per plant):
 
 | Setup | Error |
 |---|---|
-| Meta default, retrained | 750 |
-| + tuned settings (τ 0.10, mll 0.3) | 596 |
-| + air content | 497 |
-| + tuned + air (τ 0.20, mll 0.8) | **448** (−40%) |
+| Meta default, retrained | 964 |
+| + tuned settings (τ 0.20, mll 0.5) | 949 |
+| + air content | 554 |
+| + tuned + air (τ 0.05, mll 0.3) | **493** (−49%) |
 
-Cement strength, scored on the 20 mixes that record it: 635 → **418** (−34%).
+Water added on site, scored on the 20 mixes that log it: 609 → **448** (−26%).
 
-Saved model v1 predicts R-101 at 28 days as 5,084 ± 63 psi (measured 5,097).
+The saved model predicts R-101 at 28 days as 5,457 ± 39 psi (measured 5,453).
 
 **Mix proposals:** we do not use qNEHVI. Instead:
 - screen 4,000 random mixes inside the plant's own ingredient ranges (SCM ≤ 50%), with aggregates, temperature and air fixed;
@@ -139,7 +139,7 @@ Saved model v1 predicts R-101 at 28 days as 5,084 ± 63 psi (measured 5,097).
 - pick one mix per strength class (25/50/75% of the plant's 28-day strengths) whose prediction minus one SD still reaches the class;
 - compare it only with existing mixes of the same air class, and drop it if it saves no CO₂.
 
-At 6% air (16 similar mixes) the proposals save 34% and 24% CO₂ against R-131. At 2% air (28 mixes) they save 10–20%.
+At 6% air (15 similar mixes) the proposals save 29–38% CO₂. At 2% air (28 mixes) they save 17–20%.
 
 ## Meta models used
 
@@ -152,12 +152,11 @@ At 6% air (16 similar mixes) the proposals save 34% and 24% CO₂ against R-131.
 
 The generator creates plant mixes. Their "true" strength is:
 - Meta's pretrained BOxCrete prediction;
-- times a plant material factor;
-- minus about 5% per 1% of air;
-- plus a cement-strength effect;
+- minus about 5% per 1% of air above 2%;
+- minus about 6% per gal/yd³ of water added on site (0–3 gal/yd³);
 - plus measurement noise.
 
-It then writes the three messy Excel files, with air recorded for all mixes and cement strength for 40% of them. AutoML has to find the gains itself, and the video says the data is synthetic.
+It then writes the three messy Excel files, with air recorded for all mixes and site water for 20 of 46. Site water also explains why the plant runs weaker than Meta's model. AutoML has to find the gains itself, and the video says the data is synthetic.
 
 ## Architecture
 

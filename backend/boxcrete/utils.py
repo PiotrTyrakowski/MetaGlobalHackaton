@@ -80,7 +80,7 @@ CONCRETE_BOUNDS_DICT = {
     "Material Source": (0, 2),
     "Temp (C)": (0, 40),
     "Air (%)": (0, 10),
-    "Cement Strength (MPa)": (30, 70),
+    "Site Water (gal/yd3)": (0, 5),
     "Time": (0, 28),
 }
 

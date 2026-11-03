@@ -3,7 +3,7 @@
 Each file looks like something a US ready-mix plant keeps: imperial units,
 its own column names, a title row, inconsistent mix IDs, one row per
 cylinder, a few failed cylinders, breaks past 28 days, and a QC log where
-mill-cert cement strength is only filled in for some deliveries.
+water added on site is only filled in for some trucks.
 """
 
 import sys
@@ -15,7 +15,6 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from mixpilot.units import (  # noqa: E402
     LB_PER_YD3_TO_KG_PER_M3,
-    MPA_TO_PSI,
     hrwr_kg_m3_to_oz_cwt,
 )
 
@@ -109,7 +108,9 @@ for _, r in mixes.iterrows():
     date = cast + pd.Timedelta(days=(int(r["Mix Name"][1:]) - 101) * 13)
     raw_id = r["Mix Name"][1:]
     mix_id = rng.choice([f"R{raw_id}", f"r-{raw_id}", f"R {raw_id}"])
-    has_cert = not pd.isna(r["Cement Strength (MPa)"])
+    has_water = not pd.isna(r["Site Water (gal/yd3)"])
+    water_dev = rng.normal(0, 0.2, n)
+    water_dev -= water_dev.mean()
     for k in range(n):
         qc.append(
             {
@@ -120,8 +121,7 @@ for _, r in mixes.iterrows():
                 "Air (%)": round(float(r["Air (%)"] + air_dev[k]), 2),
                 "Conc Temp (°F)": round(float(rng.uniform(62, 78))),
                 "Cure Temp (°F)": round(float(r["Temp (C)"] * 9 / 5 + 32 + temp_dev[k]), 2),
-                "Cement Lot": f"L{2500 + int(r['Mix Name'][1:]) // 3}",
-                "Mill Cert C109 28d (psi)": round(float(r["Cement Strength (MPa)"] * MPA_TO_PSI)) if has_cert else None,
+                "Water Added on Site (gal/yd³)": round(float(r["Site Water (gal/yd3)"] * (1 + water_dev[k])), 2) if has_water else None,
             }
         )
         ticket += int(rng.integers(3, 40))

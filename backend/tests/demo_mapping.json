@@ -14,7 +14,7 @@
   },
   "extra_inputs": {
     "Air (%)": {"file": "daily_QC.xlsx", "column": "Air (%)", "unit": "%"},
-    "Cement Strength (psi)": {"file": "daily_QC.xlsx", "column": "Mill Cert C109 28d (psi)", "unit": "psi"}
+    "Site Water (gal/yd3)": {"file": "daily_QC.xlsx", "column": "Water Added on Site (gal/yd³)", "unit": "gal/yd3"}
   },
   "exclude": [{"file": "cylinder_breaks.xlsx", "column": "Notes", "contains": "cap failure"}],
   "hrwr_density": 1.06

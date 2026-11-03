@@ -27,7 +27,7 @@ base_mapping = {k: v for k, v in mapping.items() if k != "extra_inputs"}
 print("candidates:", *candidate_inputs(files, base_mapping), sep="\n  ")
 
 t = time.time()
-print("cement strength:", automl.evaluate_input(data, "Cement Strength (psi)", ["Air (%)"]), f"{time.time() - t:.0f}s")
+print("site water:", automl.evaluate_input(data, "Site Water (gal/yd3)", ["Air (%)"]), f"{time.time() - t:.0f}s")
 
 t = time.time()
 res = automl.search(data, ["Air (%)"], on_result=lambda r: print(f"  done {r['label']:<40} {r['settings']} 28d={r['rmse_28d']}"))

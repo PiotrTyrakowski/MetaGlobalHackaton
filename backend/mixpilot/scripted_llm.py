@@ -56,8 +56,8 @@ class ScriptedLLM:
                 self._call("inspect_files"),
                 self._call("prepare_data", **demo_prepare_args()),
                 self._call("add_input", name="Air (%)", file="daily_QC.xlsx", column="Air (%)"),
-                self._call("test_input", name="Cement Strength (psi)", file="daily_QC.xlsx",
-                           column="Mill Cert C109 28d (psi)"),
+                self._call("test_input", name="Site Water (gal/yd3)", file="daily_QC.xlsx",
+                           column="Water Added on Site (gal/yd³)"),
             ]
             self.reply = self._prep_reply
         elif text.startswith("[app] Training finished"):
@@ -70,8 +70,8 @@ class ScriptedLLM:
         t = self.results["test_input"]
         return (f"Your three files give {rep['mixes']} mixes with {rep['cylinders_used']} usable cylinders. "
                 f"Air content is recorded for every mix, so I added it as a new input. "
-                f"Cement strength is on only {t['mixes_with_value']} of {t['mixes']} mixes; on those it cuts the "
-                f"28-day error from {t['rmse_28d_without']} to {t['rmse_28d_with']} psi, so it's worth recording for every batch.")
+                f"Water added on site is logged for only {t['mixes_with_value']} of {t['mixes']} mixes; on those it cuts the "
+                f"28-day error from {t['rmse_28d_without']} to {t['rmse_28d_with']} psi, so it's worth logging for every truck.")
 
     def _results_reply(self) -> str:
         tr = self.results["train"]
