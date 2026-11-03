@@ -214,7 +214,7 @@ const handlers = {
     agentBlock().querySelector('.texts').append(p);
   },
   text_delta(e) { const p = $('m' + e.message); if (p) { p.dataset.raw = (p.dataset.raw || '') + e.text; p.innerHTML = md(p.dataset.raw); scroll(); } },
-  message_end(e) { const p = $('m' + e.message); if (p) p.innerHTML = md(e.text); },
+  message_end(e) { const p = $('m' + e.message); if (p && e.interim) p.remove(); else if (p) p.innerHTML = md(e.text); },
   card(e) {
     const d = document.createElement('div');
     const name = label(e.input);
@@ -229,6 +229,7 @@ const handlers = {
     addItem(d);
   },
   train_button() {
+    $('train')?.remove();
     const actions = agentBlock().querySelector('.actions');
     actions.innerHTML = '<button class="btn" id="train">Train model</button>';
     scroll();

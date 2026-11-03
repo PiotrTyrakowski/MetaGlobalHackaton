@@ -58,7 +58,6 @@ class ScriptedLLM:
                 self._call("add_input", name="Air (%)", file="daily_QC.xlsx", column="Air (%)"),
                 self._call("test_input", name="Cement Strength (psi)", file="daily_QC.xlsx",
                            column="Mill Cert C109 28d (psi)"),
-                self._call("offer_training"),
             ]
             self.reply = self._prep_reply
         elif text.startswith("[app] Training finished"):

@@ -169,8 +169,9 @@ backend/   FastAPI (Python 3.12)
                 per setup), propose (mix screening + Pareto), units, schema
     agent.py    loop on Meta Responses API (OpenAI SDK, base_url=https://api.meta.ai/v1),
                 streamed text, previous_response_id; scripted_llm.py replays the demo without a key
-    tools.py    inspect_files, prepare_data, add_input, test_input, offer_training,
-                propose_mixes, predict_strength, list_models; train (the Train button)
+    tools.py    inspect_files, prepare_data, add_input, test_input, propose_mixes,
+                predict_strength, list_models; app-side: offer_training (shown after a turn
+                that left untrained data) and train (the Train button)
     server.py   FastAPI: POST /api/sessions[/demo] · /files · /messages · /train,
                 GET /api/sessions/{id}/events (SSE, replayable) · GET /api/models
   boxcrete/     vendored BOxCrete with the extra-input patch
@@ -184,8 +185,10 @@ backend/   FastAPI (Python 3.12)
 3. [x] Synthetic Excel generator: `backend/scripts/make_demo_excel.py`.
 4. [x] Tools: read → map → validate → suggest inputs.
 5. [x] AutoML + leaderboard + model save + mix proposals.
-6. [~] Agent loop on Muse Spark + SSE: built and run end to end with the scripted stand-in; not yet run on Muse Spark (needs the API key).
-7. [ ] Frontend: chat + 3 artifacts + Models tab.
+6. [x] Agent loop on Muse Spark + SSE: full demo run on muse-spark-1.3 (prep 49 s with the right mapping and
+   inputs, training, proposals, what-if questions). The Train button is app state, not a model tool;
+   text the model writes before tool calls is hidden.
+7. [x] Frontend: chat + 3 artifacts + Models tab (single page served by FastAPI).
 8. [ ] Demo video (2–3 min) + README + submission.
 
 ## Open questions
