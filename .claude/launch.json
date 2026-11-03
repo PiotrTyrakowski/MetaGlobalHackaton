@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "mixpilot-scripted",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "cd backend && MIXPILOT_LLM=scripted PYTHONPATH=. exec uv run uvicorn mixpilot.server:app --port 8000"],
+      "port": 8000
+    },
+    {
+      "name": "mixpilot",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "cd backend && PYTHONPATH=. exec uv run uvicorn mixpilot.server:app --port 8000"],
+      "port": 8000
+    }
+  ]
+}
