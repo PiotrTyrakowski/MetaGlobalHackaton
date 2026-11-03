@@ -158,4 +158,13 @@ def models():
     return {"models": tools.list_models_index()}
 
 
-app.mount("/", StaticFiles(directory=BACKEND / "mixpilot" / "static", html=True), name="ui")
+class UI(StaticFiles):
+    """The single-page UI, revalidated on every load so a reload picks up edits."""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
+app.mount("/", UI(directory=BACKEND / "mixpilot" / "static", html=True), name="ui")

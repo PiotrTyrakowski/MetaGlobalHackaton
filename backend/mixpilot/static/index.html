@@ -399,6 +399,7 @@ function connect(id) {
   sid = id; history.replaceState(null, '', '#' + id);
   if (es) es.close();
   es = new EventSource(`/api/sessions/${id}/events`);
+  es.onerror = () => { if (es.readyState === EventSource.CLOSED) handlers.error({ text: 'This session is gone because the server restarted. Reload the page to start again.' }); };
   es.onmessage = m => {
     const e = JSON.parse(m.data);
     if (e.seq <= lastSeq) return;
@@ -459,6 +460,8 @@ $('composer').addEventListener('submit', async e => {
   if (!r.ok) handlers.error({ text: (await r.json()).detail });
 });
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => cur && show(cur));
+// a failed fetch means the server is down; say so instead of leaving an empty chat
+addEventListener('unhandledrejection', e => { if (e.reason instanceof TypeError) handlers.error({ text: "Can't reach the MixPilot server. Start it, then reload the page." }); });
 
 (async () => {
   const id = location.hash.slice(1);
