@@ -80,6 +80,8 @@ button:disabled{cursor:default;opacity:.55}
 .ptab.on{background:var(--panel);border-color:var(--line);color:var(--ink);margin-bottom:-1px}
 .pbody{flex:1;overflow:auto;padding:24px 28px 40px;background:var(--panel)}
 .pbody h2{margin:0 0 4px;font-size:18px;font-weight:600}
+.pbody h3{margin:28px 0 2px;font-size:15px;font-weight:600}
+.pbody h3 + .note{margin:0 0 12px}
 .lead{color:var(--ink-2);margin:0 0 20px;max-width:680px}
 .note{font-size:12.5px;color:var(--ink-3);max-width:680px}
 .blank{color:var(--ink-3);margin-top:40px;text-align:center}
@@ -262,9 +264,15 @@ const A = {
   data: { t: 'Data', render: d => {
     const n = d.mixes;
     const dropped = Object.entries(d.dropped).map(([k, v]) => `${v} cylinder${v > 1 ? 's' : ''} (${esc(k)})`).join(', ');
-    return `<h2>Model inputs</h2>
-    <p class="lead">Every input the model is trained on, where it came from, and how many of your ${n} mixes have it.</p>
+    const o = d.output;
+    return `<h2>Your data</h2>
+    <p class="lead">The model learns to predict your concrete's strength at each test age from the mix inputs below.</p>
     <div class="big"><div><div class="n">${n}</div><div class="l">mixes</div></div><div><div class="n">${fmt(d.cylinders_used)}</div><div class="l">cylinders used, of ${fmt(d.cylinders_read)}</div></div><div><div class="n">${d.ages.join(' · ')}</div><div class="l">test ages (days)</div></div></div>
+    ${o ? `<h3>Output: concrete strength</h3>
+    <p class="note">From ${esc(o.source.file)} · ${esc(o.source.column)} at ${esc(o.age.column)}. One line per mix, the average of its cylinders.</p>
+    <div class="card">${strengthChart(o.curves, d.ages)}<div class="legend"><span><i style="background:${css('--ink-3')};opacity:.5"></i>each mix</span><span><i style="background:${css('--accent')}"></i>median of your mixes</span></div></div>` : ''}
+    <h3>Inputs</h3>
+    <p class="note">Where each input came from and how many of your ${n} mixes have it.</p>
     <div class="card scroll-x" style="padding:4px 10px"><table>
       <tr><th>Input</th><th>From</th><th style="width:26%">Coverage</th><th class="num"></th></tr>
       ${d.coverage.map(r => {
@@ -327,6 +335,28 @@ const A = {
     <p class="note">Quantities in lb/yd³${fixed ? ', ' + esc(fixed) : ''}. CO₂ in kg CO₂e per m³. Predictions are lab-cured; your QC engineer signs off.</p>`;
   }},
 };
+
+// strength gain: one line per mix over test age (log-spaced so 3 and 7 days don't crowd), median on top
+function strengthChart(curves, ages) {
+  const ys = curves.flatMap(c => c.points.map(p => p[1]));
+  const y0 = Math.floor(Math.min(...ys) / 1000) * 1000, y1 = Math.ceil(Math.max(...ys) / 1000) * 1000;
+  const W = 640, H = 300, m = { l: 56, r: 64, t: 30, b: 40 };
+  const lx = a => Math.log(a + 1), a0 = lx(Math.min(...ages)), a1 = lx(Math.max(...ages));
+  const X = a => m.l + (lx(a) - a0) / (a1 - a0 || 1) * (W - m.l - m.r), Y = v => H - m.b - (v - y0) / (y1 - y0) * (H - m.t - m.b);
+  const line = pts => pts.map(p => `${X(p[0])},${Y(p[1])}`).join(' ');
+  let g = `<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+  for (let t = y0; t <= y1; t += 1000) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(t)}" y2="${Y(t)}" stroke="${css('--grid')}"/><text x="${m.l - 8}" y="${Y(t) + 4}" text-anchor="end" font-size="11" fill="${css('--ink-3')}">${fmt(t)}</text>`;
+  ages.forEach(a => g += `<text x="${X(a)}" y="${H - m.b + 16}" text-anchor="middle" font-size="11" fill="${css('--ink-3')}">${a} d</text>`);
+  g += `<text x="${(m.l + W - m.r) / 2}" y="${H - 4}" text-anchor="middle" font-size="11.5" fill="${css('--ink-2')}">Age at test (days)</text><text x="12" y="${m.t - 12}" font-size="11.5" fill="${css('--ink-2')}">Strength (psi)</text>`;
+  curves.forEach(c => g += `<polyline fill="none" stroke="${css('--ink-3')}" stroke-opacity=".35" stroke-width="1.2" points="${line(c.points)}"><title>${esc(c.mix)}: ${c.points.map(p => `${p[0]} d ${fmt(p[1])}`).join(' · ')} psi</title></polyline>`);
+  const med = ages.map(a => {
+    const v = curves.map(c => c.points.find(p => p[0] === a)?.[1]).filter(x => x != null).sort((p, q) => p - q);
+    return v.length ? [a, v[Math.floor(v.length / 2)]] : null;
+  }).filter(Boolean);
+  g += `<polyline fill="none" stroke="${css('--accent')}" stroke-width="2.5" points="${line(med)}"/>`;
+  med.forEach(p => g += `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="4" fill="${css('--accent')}"/><text x="${X(p[0]) + 8}" y="${Y(p[1]) - 8}" font-size="12" font-weight="500" fill="${css('--ink')}">${fmt(p[1])}</text>`);
+  return g + `</svg>`;
+}
 
 const UNIT_NOTE = { 'lb/yd3': 'lb/yd³ → kg/m³', 'gal/yd3': 'gal/yd³ → kg/m³', 'oz/cwt': 'oz/cwt → kg/m³', 'F': '°F → °C', 'MPa': 'MPa → psi' };
 function convs(list) {
