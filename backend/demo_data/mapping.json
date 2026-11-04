@@ -1,0 +1,73 @@
+{
+  "recipes": {
+    "file": "mix_designs.xlsx",
+    "key": "Mix ID",
+    "fields": {
+      "cement": {
+        "column": "Type IL Cement (lb/cy)",
+        "unit": "lb/yd3"
+      },
+      "fly_ash": {
+        "column": "Class F Fly Ash (lb/cy)",
+        "unit": "lb/yd3"
+      },
+      "slag": {
+        "column": "Slag Cement (lb/cy)",
+        "unit": "lb/yd3"
+      },
+      "water": {
+        "column": "Water (gal/cy)",
+        "unit": "gal/yd3"
+      },
+      "hrwr": {
+        "column": "HRWR (oz/cwt)",
+        "unit": "fl_oz/cwt"
+      },
+      "fine": {
+        "column": "Sand SSD (lb/cy)",
+        "unit": "lb/yd3"
+      },
+      "coarse": {
+        "column": "#57 Stone SSD (lb/cy)",
+        "unit": "lb/yd3"
+      }
+    },
+    "other_cementitious": [
+      {
+        "column": "Silica Fume (lb/cy)",
+        "unit": "lb/yd3"
+      }
+    ]
+  },
+  "batches": {
+    "file": "daily_QC.xlsx",
+    "key": "Ticket No.",
+    "recipe_key": "Mix Code",
+    "fields": {
+      "cure_temp": {
+        "column": "Cure Tank (F)",
+        "unit": "F"
+      }
+    }
+  },
+  "tests": {
+    "file": "cylinder_breaks.xlsx",
+    "batch_key": "Ticket #",
+    "fields": {
+      "age": {
+        "column": "Age",
+        "unit": "days"
+      },
+      "strength": {
+        "column": "Strength (psi)",
+        "unit": "psi"
+      }
+    },
+    "exclude": [
+      {
+        "column": "Tech Notes",
+        "contains": "cap failure"
+      }
+    ]
+  }
+}

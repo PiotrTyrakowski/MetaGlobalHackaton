@@ -1,136 +1,224 @@
-"""Agentic AutoML over BOxCrete setups: which inputs and settings fit this plant best.
+"""AutoML for BOxCrete: re-tune the settings Meta hard-coded, on the plant's data.
 
-Every setup is scored by 5-fold cross-validation grouped by mix: the model
-never sees any test of a held-out mix. Meta's default setup is always the
-baseline; another setup wins only if it beats it clearly.
+Two searches run side by side, one per input set (Meta's 10 inputs, and the 10
+plus the approved columns). Each is a small Bayesian optimization with BoTorch
+over (gate_tau, shrinkage_sigma, mll_weight); every trial is a 5-fold refit
+holding out whole recipes, scored by the average relative error over all test
+ages (early-age predictions matter too, e.g. 7-day breaks forecasting 28-day
+strength). Meta's default settings are always the first trial.
+
+Then the default and the best tuned settings of both input sets are re-checked on
+new fold splits; those numbers make the leaderboard. A setup only wins if it beats
+Meta's default on most held-out folds, and tuned settings only count if they also
+beat Meta's settings on the same inputs on most folds.
 """
 
-import itertools
-import json
-import os
-import subprocess
-import sys
+from __future__ import annotations
+
+import math
+import time
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
-from pathlib import Path
+from dataclasses import dataclass, field
 
-BACKEND = Path(__file__).resolve().parents[1]
-DEFAULT = {"gate_tau": 0.1, "prior_sigma": 0.001, "mll_weight": 0.5}
-GRID = {"gate_tau": [0.05, 0.1, 0.2], "mll_weight": [0.3, 0.5, 0.8]}
-MIN_GAIN = 0.05  # a setup must beat Meta's default by 5% to replace it
-PARALLEL = 5
+import numpy as np
+import torch
+from botorch.acquisition.logei import qLogExpectedImprovement
+from botorch.fit import fit_gpytorch_mll
+from botorch.models import SingleTaskGP
+from botorch.optim import optimize_acqf
+from gpytorch.mlls import ExactMarginalLogLikelihood
 
+from mixpilot import boxfit
+from mixpilot.boxfit import META_DEFAULT, KFoldJob, Settings
+from mixpilot.dataset import Dataset
 
-def run_worker(job: str, *, data: str | Path | None = None, extra=(), gate_tau=0.1, prior_sigma=0.001,
-               mll_weight=0.5, **kw) -> dict:
-    cmd = [sys.executable, "-m", "mixpilot.worker", job]
-    if data:
-        cmd += ["--data", str(data)]
-    for e in extra:
-        cmd += ["--extra", e]
-    cmd += ["--tau", str(gate_tau), "--sigma", str(prior_sigma), "--mll", str(mll_weight)]
-    for k, v in kw.items():
-        if v is not None:
-            cmd += [f"--{k.replace('_', '-')}", str(v)]
-    env = dict(os.environ, OMP_NUM_THREADS="2", PYTHONPATH=str(BACKEND))
-    out = subprocess.run(cmd, cwd=BACKEND, env=env, capture_output=True, text=True)
-    lines = [ln for ln in out.stdout.splitlines() if ln.startswith("{")]
-    if out.returncode or not lines:
-        raise RuntimeError(f"worker {job} failed: {out.stderr[-800:]}")
-    return json.loads(lines[-1])
+# (name, low, high, log scale)
+SPACE = [("gate_tau", 0.03, 0.5, True), ("shrinkage_sigma", 1e-4, 0.3, True), ("mll_weight", 0.0, 1.0, False)]
+SEARCH_SEED = 0  # fold split used during the search
+RECHECK_SEEDS = (1, 2)  # new fold splits for the leaderboard
 
 
-def label(setup: dict) -> str:
-    parts = ["Meta's default setup" if setup["settings"] == DEFAULT else "tuned settings"]
-    parts += [f"+ {e.split(' (')[0].lower()}" for e in setup["extra"]]
-    return " ".join(parts)
+@dataclass
+class Trial:
+    setup: str
+    settings: Settings
+    score: float  # average relative error over ages
+    error_28d: float
+    source: str  # "meta default" | "sobol" | "bayes-opt"
 
 
-def search(data: str | Path, extra_inputs: list[str], on_result: Callable[[dict], None] | None = None) -> dict:
-    """Grid over input sets (base, base + all accepted extras) x tuning settings."""
-    input_sets = [[], list(extra_inputs)] if extra_inputs else [[]]
-    setups = []
-    for extra in input_sets:
-        for tau, mll in itertools.product(GRID["gate_tau"], GRID["mll_weight"]):
-            setups.append({"extra": extra, "settings": {**DEFAULT, "gate_tau": tau, "mll_weight": mll}})
-
-    results = []
-    with ThreadPoolExecutor(PARALLEL) as ex:
-        futures = {ex.submit(run_worker, "cv", data=data, extra=s["extra"], **s["settings"]): s for s in setups}
-        for f in as_completed(futures):
-            s = futures[f]
-            r = {**s, "label": label(s), **{k: f.result()[k] for k in ("rmse_28d", "rmse_all", "mixes")}}
-            results.append(r)
-            if on_result:
-                on_result(r)
-
-    results.sort(key=lambda r: r["rmse_28d"])
-    baseline = next(r for r in results if not r["extra"] and r["settings"] == DEFAULT)
-    best = results[0] if results[0]["rmse_28d"] < (1 - MIN_GAIN) * baseline["rmse_28d"] else baseline
-
-    def best_of(extra: list[str], tuned: bool):
-        pool = [r for r in results if r["extra"] == extra and (tuned or r["settings"] == DEFAULT)]
-        return min(pool, key=lambda r: r["rmse_28d"]) if pool else None
-
-    summary = [baseline, best_of([], True)]
-    if extra_inputs:
-        summary += [best_of(list(extra_inputs), False), best_of(list(extra_inputs), True)]
-    summary = [dict(r, row=name) for r, name in zip(summary, [
-        "Meta's default setup", "+ tuned settings",
-        f"+ {', '.join(e.split(' (')[0].lower() for e in extra_inputs)}",
-        f"+ tuned settings + {', '.join(e.split(' (')[0].lower() for e in extra_inputs)}",
-    ])]
-    return {
-        "baseline": baseline,
-        "best": best,
-        "gain": round(1 - best["rmse_28d"] / baseline["rmse_28d"], 3),
-        "summary": summary,
-        "all": results,
-    }
+@dataclass
+class Evaluation:
+    score: float  # mean over ages of RMSE / mean strength at that age
+    error_28d: float
+    errors_by_age: dict[float, float]
+    fold_scores: list[float] = field(default_factory=list)
 
 
-def evaluate_input(data: str | Path, column: str, base_extra: list[str] = ()) -> dict:
-    """Error with and without `column`, on only the mixes that record it."""
-    with ThreadPoolExecutor(2) as ex:
-        without = ex.submit(run_worker, "cv", data=data, extra=list(base_extra), only_with=column)
-        with_ = ex.submit(run_worker, "cv", data=data, extra=[*base_extra, column], only_with=column)
-        a, b = without.result(), with_.result()
-    return {
-        "column": column,
-        "mixes": a["mixes"],
-        "rmse_28d_without": a["rmse_28d"],
-        "rmse_28d_with": b["rmse_28d"],
-        "gain": round(1 - b["rmse_28d"] / a["rmse_28d"], 3),
-    }
+def to_unit(s: Settings) -> list[float]:
+    out = []
+    for name, lo, hi, log in SPACE:
+        v = getattr(s, name)
+        out.append((math.log(v) - math.log(lo)) / (math.log(hi) - math.log(lo)) if log else (v - lo) / (hi - lo))
+    return out
 
 
-def save_model(data: str | Path, setup: dict, models_dir: str | Path, cv: dict, **info) -> dict:
-    """Fit the chosen setup on all data and register it as the next version."""
-    models_dir = Path(models_dir)
-    index_path = models_dir / "index.json"
-    index = json.loads(index_path.read_text()) if index_path.exists() else []
-    version = f"v{len(index) + 1}"
-    run_worker("fit", data=data, extra=setup["extra"], **setup["settings"], out=models_dir / version)
-    entry = {
-        "version": version,
-        "trained": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "extra_inputs": setup["extra"],
-        "settings": setup["settings"],
-        "mixes": cv["mixes"],
-        "rmse_28d": cv["rmse_28d"],
-        **info,
-    }
-    index.append(entry)
-    index_path.write_text(json.dumps(index, indent=1))
-    return entry
+def from_unit(u) -> Settings:
+    vals = {}
+    for (name, lo, hi, log), x in zip(SPACE, u):
+        x = float(min(max(x, 0.0), 1.0))
+        v = math.exp(math.log(lo) + x * (math.log(hi) - math.log(lo))) if log else lo + x * (hi - lo)
+        vals[name] = float(f"{v:.3g}")
+    return Settings(**vals)
 
 
-def predict(model_dir: str | Path, rows: list[dict]) -> list[dict]:
-    rows_path = Path(model_dir) / "_rows.json"
-    rows_path.write_text(json.dumps(rows))
-    return run_worker("predict", model=model_dir, rows=rows_path)["predictions"]
+def evaluate_many(ds: Dataset, configs: list[tuple[list[str], Settings]], seeds=(SEARCH_SEED,)
+                  ) -> list[Evaluation]:
+    """5-fold refit errors for (inputs, settings) pairs, pooled over fold seeds."""
+    jobs, keys = [], []
+    for i, (extras, settings) in enumerate(configs):
+        X, Y = ds.tensors(extras)
+        for seed in seeds:
+            jobs.append(KFoldJob(X, Y, settings, k=5, seed=seed, groups=ds.groups))
+            keys.append(i)
+    results = boxfit.kfold_many(jobs)
+    ages = ds.rows["age"].to_numpy()
+    strength = ds.rows["strength"].to_numpy()
+    a28 = 28.0 if (ages == 28).any() else float(ages.max())
+
+    def score(resid: np.ndarray, mask: np.ndarray) -> float:
+        per_age = [boxfit.rmse(resid[mask & (ages == a)]) / strength[mask & (ages == a)].mean()
+                   for a in np.unique(ages) if (mask & (ages == a)).any()]
+        return float(np.mean(per_age))
+
+    out = []
+    for i in range(len(configs)):
+        folds = [(r, f) for (r, f), k in zip(results, keys) if k == i]
+        resid = np.concatenate([r for r, _ in folds])
+        if not np.isfinite(resid).all():
+            out.append(Evaluation(math.inf, math.inf, {}, []))
+            continue
+        age_all = np.tile(ages, len(seeds))
+        by_age = {float(a): boxfit.rmse(resid[age_all == a]) for a in np.unique(ages)}
+        overall = float(np.mean([score(r, np.ones_like(ages, dtype=bool)) for r, _ in folds]))
+        fold_scores = [score(r, f == j) for r, f in folds for j in range(5)]
+        out.append(Evaluation(overall, by_age[a28], by_age, fold_scores))
+    return out
 
 
-def propose(model_dir: str | Path, fixed: dict | None = None) -> dict:
-    return run_worker("propose", model=model_dir, fixed=json.dumps(fixed or {}))
+def run_automl(ds: Dataset, inputs: list[str], n_init: int = 3, n_bayes: int = 10,
+               progress: Callable[[str], None] = lambda _: None, seed: int = 0) -> dict:
+    t_start = time.perf_counter()
+    setups = {"meta10": [], "plus": list(inputs)} if inputs else {"meta10": []}
+    trials: list[Trial] = []
+    sobol = torch.quasirandom.SobolEngine(len(SPACE), scramble=True, seed=seed)
+    init_points = [from_unit(u) for u in sobol.draw(n_init).tolist()]
+
+    def run_round(proposals: dict[str, tuple[Settings, str]], label: str) -> None:
+        keys = list(proposals)
+        evals = evaluate_many(ds, [(setups[k], proposals[k][0]) for k in keys])
+        for k, e in zip(keys, evals):
+            trials.append(Trial(k, proposals[k][0], e.score, e.error_28d, proposals[k][1]))
+        best = {k: min(t.score for t in trials if t.setup == k) for k in keys}
+        progress(f"{label}: " + ", ".join(f"{_setup_name(k, inputs)} best {best[k]:.1%} error" for k in keys))
+
+    run_round({k: (META_DEFAULT, "meta default") for k in setups}, "trial 1 (Meta's settings)")
+    for i, s in enumerate(init_points):
+        run_round({k: (s, "sobol") for k in setups}, f"trial {i + 2}")
+    for i in range(n_bayes):
+        run_round({k: (_propose(trials, k, seed + i), "bayes-opt") for k in setups},
+                  f"trial {n_init + 2 + i}")
+
+    # re-check Meta's default and the best tuned settings of each input set on new splits
+    best_settings = {k: min((t for t in trials if t.setup == k), key=lambda t: t.score).settings
+                     for k in setups}
+    rows_cfg = [("meta10", META_DEFAULT, False), ("meta10", best_settings["meta10"], True)]
+    if "plus" in setups:
+        rows_cfg += [("plus", META_DEFAULT, False), ("plus", best_settings["plus"], True)]
+    progress("re-checking the best setups on new fold splits")
+    evals = evaluate_many(ds, [(setups[k], s) for k, s, _ in rows_cfg], seeds=RECHECK_SEEDS)
+
+    base = evals[0]
+    untuned = {k: e for (k, _, tuned), e in zip(rows_cfg, evals) if not tuned}
+    rows = []
+    for (k, s, tuned), e in zip(rows_cfg, evals):
+        won = sum(a < b for a, b in zip(e.fold_scores, base.fold_scores))
+        won_vs_untuned = sum(a < b for a, b in zip(e.fold_scores, untuned[k].fold_scores))
+        rows.append(dict(
+            name=_row_name(k, tuned, inputs), inputs=setups[k], settings=s.as_dict(), tuned=tuned,
+            error_28d_psi=round(e.error_28d), errors_by_age_psi={_age(a): round(v) for a, v in e.errors_by_age.items()},
+            error_all_ages=round(e.score, 4), error_all_ages_pct=round(100 * e.score, 1),
+            folds_won_vs_baseline=f"{won}/{len(base.fold_scores)}", baseline=(k == "meta10" and not tuned),
+            vs_baseline=round(e.score / base.score - 1, 3),
+            vs_baseline_28d=round(e.error_28d / base.error_28d - 1, 3),
+            **({"folds_won_vs_meta_settings": f"{won_vs_untuned}/{len(e.fold_scores)}"} if tuned else {}),
+        ))
+
+    def most(frac: str) -> bool:
+        won, n = map(int, frac.split("/"))
+        return won > n / 2
+
+    eligible = [r for r in rows[1:] if most(r["folds_won_vs_baseline"])
+                and r["error_all_ages"] < rows[0]["error_all_ages"]
+                and (not r["tuned"] or most(r["folds_won_vs_meta_settings"]))]
+    tuning_helped = any(r["tuned"] for r in eligible)
+    winner = min(eligible, key=lambda r: r["error_all_ages"]) if eligible else rows[0]
+    for r in rows:
+        r["best"] = r is winner
+
+    return dict(
+        leaderboard=rows,
+        winner=dict(name=winner["name"], inputs=winner["inputs"], settings=winner["settings"],
+                    error_28d_psi=winner["error_28d_psi"], error_all_ages=winner["error_all_ages"],
+                    error_all_ages_pct=winner["error_all_ages_pct"],
+                    vs_baseline=winner["vs_baseline"], vs_baseline_28d=winner["vs_baseline_28d"]),
+        meta_default=META_DEFAULT.as_dict(),
+        tuning_helped=tuning_helped,
+        trials=[dict(setup=_setup_name(t.setup, inputs), source=t.source, **t.settings.as_dict(),
+                     error_all_ages=round(t.score, 4) if math.isfinite(t.score) else None,
+                     error_28d_psi=round(t.error_28d) if math.isfinite(t.error_28d) else None) for t in trials],
+        method=dict(search=f"BoTorch: {n_init} Sobol + {n_bayes} LogEI trials per input set, "
+                           f"Meta's default first",
+                    score="average over test ages of RMSE / mean strength, 5-fold refit holding out whole recipes; "
+                          "headline: 28-day RMSE in psi",
+                    recheck=f"{len(RECHECK_SEEDS)} new fold splits; wins only if better on most folds",
+                    space={n: [lo, hi, "log" if log else "linear"] for n, lo, hi, log in SPACE}),
+        seconds=round(time.perf_counter() - t_start),
+    )
+
+
+def _propose(trials: list[Trial], setup: str, seed: int) -> Settings:
+    """Next settings to try: LogEI on a GP over the trials so far (-log error)."""
+    ts = [t for t in trials if t.setup == setup]
+    X = torch.tensor([to_unit(t.settings) for t in ts], dtype=torch.float64)
+    finite = [t.score for t in ts if math.isfinite(t.score)]
+    worst = max(finite) * 1.5 if finite else 1.0
+    y = torch.tensor([[-math.log(t.score if math.isfinite(t.score) else worst)] for t in ts],
+                     dtype=torch.float64)
+    y = (y - y.mean()) / (y.std() if len(ts) > 1 and y.std() > 0 else 1.0)
+    gp = SingleTaskGP(X, y)
+    fit_gpytorch_mll(ExactMarginalLogLikelihood(gp.likelihood, gp))
+    acq = qLogExpectedImprovement(gp, best_f=y.max())
+    torch.manual_seed(seed)
+    bounds = torch.stack([torch.zeros(len(SPACE)), torch.ones(len(SPACE))]).to(torch.float64)
+    cand, _ = optimize_acqf(acq, bounds=bounds, q=1, num_restarts=8, raw_samples=256)
+    return from_unit(cand[0].tolist())
+
+
+def _setup_name(k: str, inputs: list[str]) -> str:
+    return "Meta's 10 inputs" if k == "meta10" else "+ " + " + ".join(_short(c) for c in inputs)
+
+
+def _row_name(k: str, tuned: bool, inputs: list[str]) -> str:
+    if k == "meta10":
+        return "+ tuned settings" if tuned else "Meta's default setup"
+    added = " + ".join(_short(c) for c in inputs)
+    return f"+ tuned settings + {added}" if tuned else f"+ {added}"
+
+
+def _short(c: str) -> str:
+    return c.split(" (")[0].strip().lower()
+
+
+def _age(a: float) -> str:
+    return f"{int(a)}d" if float(a).is_integer() else f"{a}d"

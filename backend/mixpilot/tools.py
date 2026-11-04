@@ -1,437 +1,195 @@
-"""The agent's tools: thin wrappers over the pipeline that also update the UI.
+"""The agent's data tools: read -> map -> validate -> suggest inputs.
 
-Each tool takes the session and the model's arguments and returns a small
-JSON-able dict for the model. What the user sees (cards, artifacts) is
-emitted here, from computed values, never from the model's text.
+Each tool takes the session plus the agent's arguments and returns JSON-ready
+data. The same data feeds the UI panels, so the agent only explains numbers
+that this code computed.
 """
 
+from __future__ import annotations
+
+import hashlib
 import json
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 
-from mixpilot import automl, units
-from mixpilot.checks import candidate_inputs, coverage, issues
-from mixpilot.ingest import profile_file, read_file
-from mixpilot.prepare import build_dataset, normalize_mix_id
-from mixpilot.schema import COMPOSITION
-from mixpilot.session import MODELS_DIR, Session
-
-REQUIRED = [*COMPOSITION, "Temp (C)", "Time", "Strength"]
-UNITS = {c: units.MASS_UNITS for c in COMPOSITION} | {
-    "HRWR (kg/m3)": units.HRWR_UNITS,
-    "Temp (C)": units.TEMP_UNITS,
-    "Time": {"days"},
-    "Strength": units.STRENGTH_UNITS,
-}
-ALL_UNITS = sorted(set().union(*UNITS.values()))
-COMPLETE = 0.9  # share of mixes an extra input needs to be used for training
-MIN_TEST_MIXES = 10
-
-# What the plant types, in its own units -> BOxCrete column
-US_FIELDS = {c.replace("(kg/m3)", "(lb/yd3)"): c for c in COMPOSITION if c != "HRWR (kg/m3)"}
-US_FIELDS |= {"HRWR (oz/cwt)": "HRWR (kg/m3)", "Temp (F)": "Temp (C)"}
+from mixpilot import automl, dataset, design, excel, inputs, models, units, validate
+from mixpilot.dataset import RECIPE_FIELDS, Dataset, MappingError
+from mixpilot.excel import Sheet
 
 
-class ToolError(Exception):
-    """A problem the model can fix by calling the tool differently."""
+@dataclass
+class Session:
+    plant: str = "Plant"
+    sheets: list[Sheet] = field(default_factory=list)
+    mapping: dict | None = None
+    data: Dataset | None = None
+    map_report: dict | None = None
+    validation: dict | None = None
+    suggestions: dict | None = None
+    training: dict | None = None
+    model_meta: dict | None = None
+
+    def add_files(self, paths: list[Path]) -> None:
+        names = {p.name for p in paths}
+        self.sheets = [s for s in self.sheets if s.file not in names]
+        for p in paths:
+            self.sheets += excel.read_sheets(Path(p))
 
 
-# --------------------------------------------------------------------------- helpers
-
-def _columns(s: Session) -> dict[str, list[str]]:
-    return {f.name: list(next(iter(read_file(f).values())).columns) for f in s.files}
-
-
-def _check_source(cols: dict[str, list[str]], file: str, column: str) -> None:
-    if file not in cols:
-        raise ToolError(f"no file named {file!r}; files are {sorted(cols)}")
-    if column not in cols[file]:
-        raise ToolError(f"{file} has no column {column!r}; columns are {cols[file]}")
+def read_files(s: Session) -> dict:
+    """Profile every uploaded sheet and suggest join keys."""
+    return dict(files=[excel.profile(sh) for sh in s.sheets], join_keys=excel.join_keys(s.sheets))
 
 
-def _rebuild(s: Session) -> tuple[pd.DataFrame, dict]:
-    df, report = build_dataset(s.files, s.mapping)
-    df.to_csv(s.dataset, index=False)
-    return df, report
+def map_columns(s: Session, mapping: dict) -> dict:
+    """Apply the agent's mapping; on failure return the errors so it can fix them."""
+    try:
+        ds, report = dataset.build(s.sheets, mapping)
+    except MappingError as e:
+        return dict(ok=False, errors=e.errors)
+    s.mapping, s.data, s.map_report = mapping, ds, report
+    s.validation = s.suggestions = None
+    return dict(ok=True, **report,
+                candidate_columns=[dict(column=c.name, level=c.level, kind=c.kind, file=c.file)
+                                   for c in ds.candidates.values()])
 
 
-def _data_artifact(s: Session, df: pd.DataFrame, report: dict) -> None:
-    extras = list(s.mapping.get("extra_inputs", {}))
-    rows = coverage(df, extras)
-    sources = s.mapping["fields"] | s.mapping.get("extra_inputs", {})
-    for r in rows:
-        r["status"] = "new" if r["input"] in s.accepted else "incomplete" if r["input"] in s.tested else None
-        src = sources.get(r["input"])
-        r["source"] = src and {"file": src["file"], "column": src["column"]}
-    strength, age = s.mapping["fields"]["Strength"], s.mapping["fields"]["Time"]
-    curves = [{"mix": mix, "points": [[float(a), round(float(v))] for a, v in zip(g["Time"], g["Strength (Mean)"])]}
-              for mix, g in df.sort_values("Time").groupby("Mix Name", sort=False)]
-    s.emit("artifact", name="data", data={
-        "mixes": report["mixes"],
-        "rows": report["rows"],
-        "ages": report["ages"],
-        "cylinders_read": report["cylinders_read"],
-        "cylinders_used": report["cylinders_used"],
-        "dropped": {k: v for k, v in report["dropped"].items() if v},
-        "conversions": report["conversions"],
-        "coverage": rows,
-        "output": {"source": {"file": strength["file"], "column": strength["column"]},
-                   "age": {"file": age["file"], "column": age["column"]}, "curves": curves},
-    })
+def validate_data(s: Session) -> dict:
+    if s.data is None:
+        return dict(ok=False, errors=["map the columns first (map_columns)"])
+    s.validation = validate.validate(s.data, s.mapping, s.map_report)
+    return s.validation
 
 
-def _extra_coverage(s: Session, name: str, file: str, column: str) -> tuple[pd.DataFrame, dict, dict]:
-    """Add an extra input to the mapping, rebuild, and measure its coverage."""
-    if s.mapping is None:
-        raise ToolError("call prepare_data first")
-    if "|" in name or name in REQUIRED or "(" not in name:
-        raise ToolError("name must look like 'Air (%)': a short label with its unit in brackets")
-    _check_source(_columns(s), file, column)
-    if file not in s.mapping["mix_id"]:
-        raise ToolError(f"{file} has no mix ID column in the mapping")
-    s.mapping.setdefault("extra_inputs", {})[name] = {"file": file, "column": column, "unit": ""}
-    df, report = _rebuild(s)
-    mixes = df.drop_duplicates("Mix Name")
-    have = int(mixes[name].notna().sum())
-    info = {
-        "input": name,
-        "mixes_with_value": have,
-        "mixes": len(mixes),
-        "share": round(have / len(mixes), 2),
-        "min": round(float(mixes[name].min()), 2) if have else None,
-        "max": round(float(mixes[name].max()), 2) if have else None,
-    }
-    return df, report, info
+def suggest_inputs(s: Session, progress: Callable[[str], None] = lambda _: None) -> dict:
+    if s.data is None:
+        return dict(ok=False, errors=["map the columns first (map_columns)"])
+    s.suggestions = inputs.suggest_inputs(s.data, progress=progress)
+    return s.suggestions
 
 
-def _model_dir(version: str | None) -> tuple[Path, dict]:
-    index = list_models_index()
-    if not index:
-        raise ToolError("no trained model yet")
-    entry = next((m for m in index if m["version"] == version), None) if version else index[-1]
-    if entry is None:
-        raise ToolError(f"no model {version!r}; have {[m['version'] for m in index]}")
-    return MODELS_DIR / entry["version"], entry
+def mapping_help() -> dict:
+    """What map_columns accepts: fields, units and an example (goes in the tool description)."""
+    return dict(
+        fields={f: sorted(u) for f, u in units.UNITS.items()},
+        recipe_fields=dataset.RECIPE_FIELDS,
+        required=sorted(dataset.REQUIRED),
+        example=dataset.MAPPING_EXAMPLE,
+    )
 
 
-def list_models_index() -> list[dict]:
-    path = MODELS_DIR / "index.json"
-    return json.loads(path.read_text()) if path.exists() else []
+def train_automl(s: Session, inputs: list[str], n_bayes: int = 10,
+                 progress: Callable[[str], None] = lambda _: None, use_cache: bool = True) -> dict:
+    """AutoML on the approved inputs, then save the winner as the next model version.
 
-
-# --------------------------------------------------------------------------- tools
-
-def inspect_files(s: Session) -> dict:
-    if not s.files:
-        raise ToolError("no files uploaded yet")
-    return {"files": [profile_file(f) for f in s.files]}
-
-
-def prepare_data(s: Session, mix_id: list[dict], fields: list[dict], exclude: list[dict] | None = None,
-                 hrwr_density: float | None = None) -> dict:
-    cols = _columns(s)
-    for m in mix_id:
-        _check_source(cols, m["file"], m["column"])
-    by_target = {}
-    for f in fields:
-        if f["target"] not in UNITS:
-            raise ToolError(f"unknown target {f['target']!r}; targets are {REQUIRED}")
-        _check_source(cols, f["file"], f["column"])
-        if f["unit"] not in UNITS[f["target"]]:
-            raise ToolError(f"{f['target']} unit must be one of {sorted(UNITS[f['target']])}, got {f['unit']!r}")
-        by_target[f["target"]] = {"file": f["file"], "column": f["column"], "unit": f["unit"]}
-    missing = [t for t in REQUIRED if t not in by_target]
-    if missing:
-        raise ToolError(f"missing targets: {missing}")
-    id_files = {m["file"]: m["column"] for m in mix_id}
-    for t, src in by_target.items():
-        if src["file"] not in id_files:
-            raise ToolError(f"{t} comes from {src['file']}, which has no mix ID column in mix_id")
-    strength_file = by_target["Strength"]["file"]
-    rules = []
-    for r in exclude or []:
-        _check_source(cols, strength_file, r["column"])
-        rules.append({"file": strength_file, "column": r["column"], "contains": r["contains"]})
-
-    s.mapping = {"mix_id": id_files, "fields": by_target, "extra_inputs": {}, "exclude": rules}
-    if hrwr_density:
-        s.mapping["hrwr_density"] = hrwr_density
-    s.accepted, s.tested = [], {}
-    s.ready_to_train = True
-    df, report = _rebuild(s)
-    _data_artifact(s, df, report)
-    return {
-        "report": report,
-        "issues": issues(df),
-        "candidate_inputs": candidate_inputs(s.files, s.mapping),
-    }
-
-
-def add_input(s: Session, name: str, file: str, column: str) -> dict:
-    df, report, info = _extra_coverage(s, name, file, column)
-    if info["share"] < COMPLETE:
-        del s.mapping["extra_inputs"][name]
-        _rebuild(s)
-        raise ToolError(f"{name} is recorded for only {info['mixes_with_value']} of {info['mixes']} mixes; "
-                        "use test_input for inputs that are not complete")
-    if name not in s.accepted:
-        s.accepted.append(name)
-    s.ready_to_train = True
-    s.emit("card", kind="input_ready", **info, file=file, column=column)
-    _data_artifact(s, df, report)
-    return {**info, "used_in_training": True}
-
-
-def test_input(s: Session, name: str, file: str, column: str) -> dict:
-    df, report, info = _extra_coverage(s, name, file, column)
-    if info["share"] >= COMPLETE:
-        raise ToolError(f"{name} is complete ({info['share']:.0%} of mixes); use add_input")
-    if info["mixes_with_value"] < MIN_TEST_MIXES:
-        del s.mapping["extra_inputs"][name]
-        _rebuild(s)
-        raise ToolError(f"only {info['mixes_with_value']} mixes record {name}; too few to measure its value")
-    s.emit("tool_progress", text=f"Testing {name.split(' (')[0].lower()} on the {info['mixes_with_value']} mixes that record it")
-    result = automl.evaluate_input(s.dataset, name, s.accepted)
-    s.tested[name] = result
-    card = {**info, "rmse_28d_without": result["rmse_28d_without"], "rmse_28d_with": result["rmse_28d_with"],
-            "gain": result["gain"], "file": file, "column": column}
-    s.emit("card", kind="input_incomplete", **card)
-    _data_artifact(s, df, report)
-    return {**card, "used_in_training": False,
-            "note": "errors are 28-day RMSE in psi, measured only on the mixes that record this input"}
-
-
-def propose_mixes(s: Session, fixed: dict | None = None, model: str | None = None) -> dict:
-    model_dir, entry = _model_dir(model or s.model)
-    fixed = {k: float(v) for k, v in (fixed or {}).items() if k in entry["extra_inputs"]}
-    r = automl.propose(model_dir, fixed)
-    s.emit("artifact", name="results", data={"model": entry["version"], **r})
-    keep = ("target_psi", "pred_psi", "sd_psi", "gwp", "compare_to", "compare_psi", "compare_gwp", "co2_saving",
-            "mix_lb_yd3", "fixed")
-    return {
-        "model": entry["version"],
-        "compared_with_mixes": r["compared_with"],
-        "proposals": [{k: p[k] for k in keep if k in p} for p in r["proposals"]],
-        "units": "strength psi, GWP kg CO2e/m3, mixes lb/yd3",
-    }
-
-
-def _us_mix(base: dict, hrwr_oz: float, extras: list[str]) -> dict:
-    """A mix row from BOxCrete's units in the plant's units."""
-    us = {k: base[v] / units.LB_PER_YD3_TO_KG_PER_M3 for k, v in US_FIELDS.items()
-          if k not in ("HRWR (oz/cwt)", "Temp (F)")}
-    return us | {"HRWR (oz/cwt)": hrwr_oz, "Temp (F)": base["Temp (C)"] * 9 / 5 + 32} | {e: base[e] for e in extras}
-
-
-def predict_strength(s: Session, ages: list[float], mix_name: str | None = None, mix: dict | None = None,
-                     change: dict | None = None, model: str | None = None) -> dict:
-    model_dir, entry = _model_dir(model or s.model)
-    data = pd.read_csv(model_dir / "data.csv")
-    extras = entry["extra_inputs"]
-    mix = dict(mix or {})
-    if mix_name:
-        rows = data[data["Mix Name"] == normalize_mix_id(mix_name)]
-        if rows.empty:
-            raise ToolError(f"no mix {mix_name!r} in the model's data")
-        base = rows.iloc[0].to_dict()
+    A finished run is cached by (data, inputs, budget), so a live demo can't stall;
+    a cache hit is reported as such.
+    """
+    if s.data is None:
+        return dict(ok=False, errors=["map the columns first (map_columns)"])
+    unknown = [c for c in inputs if c not in s.data.candidates]
+    if unknown:
+        return dict(ok=False, errors=[f"not candidate columns: {unknown}; have {list(s.data.candidates)}"])
+    key = _run_key(s.data, inputs, n_bayes)
+    cache = models.ROOT / "_cache" / f"{key}.json"
+    if use_cache and cache.exists():
+        s.training = json.loads(cache.read_text())
+        progress(f"same data and inputs as the run finished at {s.training['finished'][:16]}: reusing it")
     else:
-        base = data.median(numeric_only=True).to_dict()  # anything not given: the plant's typical value
-        needed = [k for k in US_FIELDS if k not in mix]
-        if needed:
-            raise ToolError(f"without mix_name, give every field of mix: missing {needed}")
+        s.training = automl.run_automl(s.data, inputs, n_bayes=n_bayes, progress=progress)
+        s.training["finished"] = datetime.now().isoformat(timespec="seconds")
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text(json.dumps(s.training, default=str))
+    progress("fitting the winning setup on all data and saving it")
+    s.model_meta = models.save(s.plant, s.data, s.training, s.mapping)
+    return dict(ok=True, **{k: v for k, v in s.training.items() if k != "trials"},
+                n_trials=len(s.training["trials"]), saved_as=s.model_meta["version"])
 
-    hrwr_oz = units.hrwr_kg_m3_to_oz_cwt(base["HRWR (kg/m3)"], sum(base[c] for c in ("Cement (kg/m3)", "Fly Ash (kg/m3)", "Slag (kg/m3)")))
-    now = _us_mix(base, hrwr_oz, extras)
-    for key, delta in (change or {}).items():
-        if key not in now:
-            raise ToolError(f"unknown field {key!r}; use {list(now)}")
-        mix[key] = mix.get(key, now[key]) + float(delta)
-    for key, value in mix.items():
-        if float(value) < 0 and key != "Temp (F)":
-            raise ToolError(f"{key} would be {float(value):.0f}: mix takes amounts, not differences; "
-                            "use change for differences")
-        if key in US_FIELDS and key not in ("HRWR (oz/cwt)", "Temp (F)"):
-            base[US_FIELDS[key]] = units.mass_to_kg_m3(float(value), "lb/yd3")
-        elif key == "Temp (F)":
-            base["Temp (C)"] = units.temp_to_c(float(value), "F")
-        elif key == "HRWR (oz/cwt)":
-            hrwr_oz = float(value)
-        elif key in extras:
-            base[key] = float(value)
-        else:
-            raise ToolError(f"unknown field {key!r}; use {list(US_FIELDS) + extras}")
-    binder = sum(base[c] for c in ("Cement (kg/m3)", "Fly Ash (kg/m3)", "Slag (kg/m3)"))
-    base["HRWR (kg/m3)"] = units.hrwr_oz_cwt_to_kg_m3(hrwr_oz, binder)
 
-    rows = [{**base, "Time": float(a)} for a in ages]
-    preds = automl.predict(model_dir, rows)
-    measured = {}
-    if mix_name and not mix:
-        m = data[data["Mix Name"] == normalize_mix_id(mix_name)]
-        measured = dict(zip(m["Time"].astype(float), m["Strength (Mean)"]))
-    return {
-        "model": entry["version"],
-        "mix": {k: round(v, 1 if k == "HRWR (oz/cwt)" else 2 if k in extras else None)
-                for k, v in _us_mix(base, hrwr_oz, extras).items()},
-        "predictions": [{"age_days": a, "psi": p["mean_psi"], "plus_minus": p["sd_psi"],
-                         **({"measured_psi": measured[float(a)]} if float(a) in measured else {})}
-                        for a, p in zip(ages, preds)],
-    }
+def results(s: Session, version: str | None = None) -> dict:
+    """CO2 vs strength of the plant's recipes, and lower-CO2 mixes to test next."""
+    model, meta = models.load(s.plant, version)
+    rows = pd.read_csv(models.ROOT / models.slug(s.plant) / meta["version"] / "rows.csv",
+                       dtype={"recipe": str, "batch": str})
+    extras = meta["inputs"]
+    batch_values = None
+    if s.data is not None and extras:
+        batch_values = pd.DataFrame({"recipe": s.data.batches["recipe"].to_numpy(),
+                                     **{e: s.data.feature(e).to_numpy() for e in extras}})
+    rec = design.recipe_table(rows, extras, batch_values)
+    levels = meta.get("input_levels", {})
+    out = design.propose(model, rec, extras, batch_extras=[e for e in extras if levels.get(e) == "batch"])
+    unit = _display_unit(meta.get("mapping") or s.mapping)
+    for p in out["proposals"]:
+        p["composition"] = {design.LABELS[f]: round(units.convert(f, "kg/m3", v) / _factor(unit))
+                            for f, v in p["composition_kg_m3"].items()}
+        p["composition_unit"] = unit
+    return dict(model=meta["version"], **out)
+
+
+def predict(s: Session, mixes: list[dict], ages: list[float] = (7, 28), version: str | None = None) -> dict:
+    """Predict strength for existing recipes, optionally changed (changes in any supported unit)."""
+    model, meta = models.load(s.plant, version)
+    rows = pd.read_csv(models.ROOT / models.slug(s.plant) / meta["version"] / "rows.csv",
+                       dtype={"recipe": str, "batch": str})
+    base = rows.drop_duplicates("recipe").set_index("recipe")
+    extras = meta["inputs"]
+    out, errors = [], []
+    for i, m in enumerate(mixes):
+        rid = m.get("recipe")
+        if rid is not None and rid not in base.index:
+            errors.append(f"mix {i + 1}: unknown recipe '{rid}'")
+            continue
+        comp = {f: float(base.loc[rid, f]) if rid else 0.0 for f in RECIPE_FIELDS}
+        for f, ch in (m.get("changes") or {}).items():
+            if f not in RECIPE_FIELDS:
+                errors.append(f"mix {i + 1}: can't change '{f}'; fields are {RECIPE_FIELDS}")
+                continue
+            if (msg := units.check_unit(f, ch.get("unit", "kg/m3"))) is not None:
+                errors.append(f"mix {i + 1}: {msg}")
+                continue
+            comp[f] = float(units.convert(f, ch.get("unit", "kg/m3"), ch["value"]))
+        used = {}
+        for e in extras:
+            v = (m.get("extras") or {}).get(e)
+            used[e] = float(v) if v is not None else meta["typical_extra_values"][e]["median"]
+        df = pd.DataFrame([{**comp, **used}])
+        pred = design.predict_comp(model, df, extras, [float(a) for a in ages])
+        outside = [f for f in RECIPE_FIELDS if not (meta["ranges"][f][0] * 0.9 <= comp[f]
+                                                   <= meta["ranges"][f][1] * 1.1 + 1e-9)]
+        out.append(dict(mix=rid or f"mix {i + 1}", extras_used=used,
+                        predictions=[dict(age_days=a, strength_psi=round(float(pred[float(a)][0][0])),
+                                          plus_minus_psi=round(float(1.645 * pred[float(a)][1][0])))
+                                     for a in ages],
+                        outside_training_range=outside, gwp_kg_m3=round(float(design.gwp(df, extras)[0]))))
+    return dict(model=meta["version"], mixes=out, errors=errors,
+                note="± is the model's 90% uncertainty for the mix's mean strength")
 
 
 def list_models(s: Session) -> dict:
-    return {"models": list_models_index(), "active": s.model}
+    return dict(models=[{k: m[k] for k in ("version", "trained", "inputs", "setup", "error_28d_psi",
+                                           "vs_meta_default", "recipes", "batches", "active")}
+                        for m in models.versions(s.plant)])
 
 
-# --------------------------------------------------------------------------- training (Train button)
-
-def offer_training(s: Session) -> None:
-    """Show the Train button after a turn that left prepared, untrained data."""
-    if s.mapping is not None and s.ready_to_train:
-        s.emit("train_button", inputs=s.accepted, setups=18 if s.accepted else 9)
+def _display_unit(mapping: dict | None) -> str:
+    spec = (mapping or {}).get("recipes", {}).get("fields", {}).get("cement", {})
+    return "lb/yd3" if units.normalize_unit(spec.get("unit", "kg/m3")) == "lb/yd3" else "kg/m3"
 
 
-def train(s: Session) -> dict:
-    """AutoML over setups, then fit and save the winner. Runs when the user clicks Train."""
-    total = 18 if s.accepted else 9
-    done = []
-
-    def progress():
-        best = min(done, key=lambda r: r["rmse_28d"]) if done else None
-        s.emit("artifact", name="training", data={
-            "status": "running", "done": len(done), "total": total, "extra_inputs": s.accepted,
-            "best_so_far": best and {"label": best["label"], "rmse_28d": best["rmse_28d"]},
-        })
-
-    progress()
-    res = automl.search(s.dataset, s.accepted, on_result=lambda r: (done.append(r), progress()))
-    s.emit("tool_progress", text="Fitting the winning setup on all mixes")
-    entry = automl.save_model(s.dataset, res["best"], MODELS_DIR, res["best"],
-                              baseline_rmse_28d=res["baseline"]["rmse_28d"], gain=res["gain"])
-    s.model = entry["version"]
-    s.ready_to_train = False
-
-    def is_best(r):
-        return r["extra"] == res["best"]["extra"] and r["settings"] == res["best"]["settings"]
-
-    rows = [{"row": r["row"], "rmse_28d": r["rmse_28d"], "settings": r["settings"], "extra_inputs": r["extra"],
-             "chosen": is_best(r)} for r in res["summary"]]
-    s.emit("artifact", name="training", data={
-        "status": "done", "total": total, "rows": rows, "gain": res["gain"],
-        "baseline_rmse_28d": res["baseline"]["rmse_28d"], "best_rmse_28d": res["best"]["rmse_28d"],
-        "model": entry,
-    })
-    s.emit("models_updated", model=entry)
-    return {"leaderboard": rows, "gain_vs_meta_default": res["gain"], "saved_model": entry,
-            "units": "28-day RMSE in psi, 5-fold cross-validation by mix"}
+def _factor(unit: str) -> float:
+    return units.LB_YD3_TO_KG_M3 if unit == "lb/yd3" else 1.0
 
 
-TOOLS = {
-    "inspect_files": inspect_files,
-    "prepare_data": prepare_data,
-    "add_input": add_input,
-    "test_input": test_input,
-    "propose_mixes": propose_mixes,
-    "predict_strength": predict_strength,
-    "list_models": list_models,
-}
-
-LABELS = {
-    "inspect_files": "Reading your files",
-    "prepare_data": "Building the dataset",
-    "add_input": "Adding input",
-    "test_input": "Testing input",
-    "propose_mixes": "Screening new mixes",
-    "predict_strength": "Predicting strength",
-    "list_models": "Looking up models",
-}
-
-_SOURCE = {"file": {"type": "string", "description": "file name, e.g. mix_designs.xlsx"},
-           "column": {"type": "string", "description": "exact column name as shown by inspect_files"}}
-_INPUT_ARGS = {
-    "type": "object",
-    "properties": {
-        "name": {"type": "string", "description": ("short plain-language name with unit in brackets, "
-                                                    "e.g. 'Air (%)' or 'Site water (gal/yd3)', not the column header")},
-        **_SOURCE,
-    },
-    "required": ["name", "file", "column"],
-}
-
-SCHEMAS = [
-    {"type": "function", "name": "inspect_files",
-     "description": "Describe the uploaded files: sheets, row counts, and for each column its type, fill rate, range and examples.",
-     "parameters": {"type": "object", "properties": {}}},
-    {"type": "function", "name": "prepare_data",
-     "description": (
-         "Map the plant's columns to BOxCrete's inputs and build the training dataset. Converts units, matches "
-         "mix IDs across files (case and punctuation are ignored), averages several batches of the same mix, "
-         "groups cylinders into mean/std/count per mix and age, and drops breaks after 28 days. Returns a "
-         "report, data issues, and unused numeric columns that could become extra inputs. Every target must "
-         "be mapped: " + ", ".join(REQUIRED) + ". Temp (C) is the curing temperature."),
-     "parameters": {
-         "type": "object",
-         "properties": {
-             "mix_id": {"type": "array", "description": "For every file used: the column holding the mix ID.",
-                        "items": {"type": "object", "properties": _SOURCE, "required": ["file", "column"]}},
-             "fields": {"type": "array", "description": "Where each BOxCrete input comes from, with the unit the plant used.",
-                        "items": {"type": "object", "properties": {
-                            "target": {"type": "string", "enum": REQUIRED}, **_SOURCE,
-                            "unit": {"type": "string", "enum": ALL_UNITS}},
-                            "required": ["target", "file", "column", "unit"]}},
-             "exclude": {"type": "array", "description": "Strength-table rows to drop, e.g. tests a notes column marks as invalid.",
-                         "items": {"type": "object", "properties": {
-                             "column": {"type": "string"},
-                             "contains": {"type": "string", "description": "case-insensitive text to match"}},
-                             "required": ["column", "contains"]}},
-             "hrwr_density": {"type": "number", "description": "admixture density in kg/L for oz/cwt; default 1.06"},
-         },
-         "required": ["mix_id", "fields"],
-     }},
-    {"type": "function", "name": "add_input",
-     "description": "Use an extra column as a new model input. Only for inputs recorded for at least 90% of mixes. Shows the user a card.",
-     "parameters": _INPUT_ARGS},
-    {"type": "function", "name": "test_input",
-     "description": ("For an input recorded for only part of the mixes: measure how much it improves the model on "
-                     "the mixes that have it (two cross-validated fits, about 20 s). It is not used for training. "
-                     "Shows the user a card."),
-     "parameters": _INPUT_ARGS},
-    {"type": "function", "name": "propose_mixes",
-     "description": ("With a trained model: screen candidate mixes and return ones predicted to reach the plant's "
-                     "usual strength classes with less CO2 than its existing mixes. Updates the Results panel."),
-     "parameters": {"type": "object", "properties": {
-         "fixed": {"type": "object", "description": "values held fixed for extra inputs, e.g. {\"Air (%)\": 6}",
-                   "additionalProperties": {"type": "number"}},
-         "model": {"type": "string", "description": "model version; default the latest"}}}},
-    {"type": "function", "name": "predict_strength",
-     "description": ("Predict strength with a trained model at given ages. Start from an existing mix "
-                     "(mix_name) and set fields (mix) or shift them (change), or give a whole mix. "
-                     "Fields use the plant's units: "
-                     + ", ".join(US_FIELDS) + ", plus the model's extra inputs (e.g. 'Air (%)')."),
-     "parameters": {"type": "object", "properties": {
-         "ages": {"type": "array", "items": {"type": "number"}, "description": "ages in days, at most 28"},
-         "mix_name": {"type": "string", "description": "existing mix to start from, e.g. R-101"},
-         "mix": {"type": "object", "description": "field -> new amount, e.g. {\"Cement (lb/yd3)\": 400}",
-                 "additionalProperties": {"type": "number"}},
-         "change": {"type": "object", "description": "field -> amount to add, negative to remove, "
-                    "e.g. {\"Cement (lb/yd3)\": -50}", "additionalProperties": {"type": "number"}},
-         "model": {"type": "string"}},
-         "required": ["ages"]}},
-    {"type": "function", "name": "list_models",
-     "description": "List the plant's saved models with date, inputs and error.",
-     "parameters": {"type": "object", "properties": {}}},
-]
-
-
-def call(s: Session, name: str, args: dict) -> dict:
-    if name not in TOOLS:
-        return {"error": f"unknown tool {name!r}"}
-    try:
-        return TOOLS[name](s, **args)
-    except ToolError as e:
-        return {"error": str(e)}
-    except TypeError as e:
-        return {"error": f"bad arguments: {e}"}
-    except (KeyError, ValueError) as e:
-        return {"error": f"{type(e).__name__}: {e}"}
+def _run_key(ds: Dataset, inputs: list[str], n_bayes: int) -> str:
+    h = hashlib.sha256()
+    h.update(ds.rows.to_csv(index=False).encode())
+    for c in sorted(inputs):
+        h.update(c.encode())
+        h.update(ds.feature(c).to_csv().encode())
+    h.update(f"{n_bayes}".encode())
+    return h.hexdigest()[:16]

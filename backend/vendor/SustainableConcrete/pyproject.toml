@@ -1,0 +1,88 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "boxcrete"
+version = "0.1.0"
+description = "Probabilistic models for sustainable concrete design via Bayesian optimization"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = [
+    # Lower bounds reflect the V2 strength GP's compatibility floor: we
+    # ship `docs/model/strength_model.pt` whose state_dict layout depends
+    # on gpytorch's internal buffer naming (e.g. LogNormalPrior renamed
+    # ``_transformed_loc/_scale`` -> ``_buffered_loc/_scale`` between
+    # 1.15.1 and 1.15.2; older versions fail to load the .pt). botorch
+    # 0.18 introduced API tightenings that are now consumed by the
+    # variant catalog. linear_operator 0.6 carries the corresponding
+    # cholesky-fallback semantics relied on by the JS-Python parity test.
+    # Bumping the lower bounds in lockstep with re-fitting + committing
+    # docs/model/* artifacts is the canonical upgrade path.
+    "torch>=2.0.0",
+    "botorch>=0.18.0",
+    "gpytorch>=1.15.2",
+    "linear_operator>=0.6.0",
+    "pandas>=1.5.0",
+    "numpy>=1.20.0",
+    "matplotlib>=3.5.0",
+    "scipy>=1.10.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    # black is pinned (not >=) to keep formatter output bit-for-bit
+    # identical between contributors' machines and the CI lint job.
+    # Bumping requires updating .pre-commit-config.yaml and the
+    # `pip install` line in .github/workflows/tests.yml in lockstep.
+    "black==26.3.1",
+    "flake8>=6.0.0",
+    "pre-commit>=3.0.0",
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "parameterized>=0.9.0",
+]
+notebooks = [
+    "nbconvert>=7.0.0",
+    "nbformat>=5.0.0",
+    "ipykernel>=6.0.0",
+    "jupyter>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/facebookresearch/SustainableConcrete"
+Repository = "https://github.com/facebookresearch/SustainableConcrete"
+Documentation = "https://github.com/facebookresearch/SustainableConcrete"
+
+[tool.setuptools]
+packages = ["boxcrete"]
+
+[tool.black]
+line-length = 88
+
+[tool.coverage.run]
+source = ["boxcrete"]
+omit = ["test/*", "notebooks/*", "__pycache__/*", "*.pyc"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if __name__ == .__main__.",
+    "if TYPE_CHECKING:",
+]
