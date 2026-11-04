@@ -6,7 +6,7 @@ import shutil
 from scripted_llm import ScriptedLLM
 
 from mixpilot import agent as agent_module
-from mixpilot import tools
+from mixpilot import automl, boxfit, inputs, models, tools
 from mixpilot.agent import Agent, Call, Step, upload_message
 from mixpilot.session import BACKEND, new_session
 
@@ -87,7 +87,11 @@ def test_a_tool_mistake_goes_back_to_the_model():
     shutil.rmtree(s.dir)
 
 
-def test_prep_turn_adds_two_inputs_and_offers_the_partly_logged_one():
+def test_prep_turn_adds_two_inputs_and_offers_the_partly_logged_one(monkeypatch):
+    def no_model_before_training(*_):
+        raise AssertionError("a model was fitted before the user pressed Train")
+
+    monkeypatch.setattr(boxfit, "kfold_many", no_model_before_training)
     s = session()
     files = sorted((BACKEND / "demo_data" / "plant").glob("*.xlsx"))
     for f in files:
@@ -101,9 +105,10 @@ def test_prep_turn_adds_two_inputs_and_offers_the_partly_logged_one():
 
     cards = {e["input"]: e for e in s.events if e["type"] == "card"}
     assert cards["Air (%)"]["kind"] == "input_ready" and "batches of the same mix" in cards["Air (%)"]["why"]
-    assert cards["Silica Fume (lb/cy)"]["kind"] == "input_ready"
+    assert cards["Silica Fume (lb/cy)"]["kind"] == "input_ready" and "Training tests" in cards["Silica Fume (lb/cy)"]["why"]
     mill = cards["Mill Cert 28d (psi)"]
-    assert mill["kind"] == "input_incomplete" and mill["gain"] > 0 and mill["mixes_with_value"] < mill["mixes"]
+    assert mill["kind"] == "input_incomplete" and "batches of the same mix" in mill["why"] and "Air" in mill["why"]
+    assert mill["mixes_with_value"] < mill["mixes"]
     assert mill["recorded_from"]  # the plant started logging it later
 
     data = s.artifacts["data"]
@@ -121,4 +126,53 @@ def test_prep_turn_adds_two_inputs_and_offers_the_partly_logged_one():
     assert s.accepted[-1] == "Mill Cert 28d (psi)"
     assert any(e["type"] == "input_used" for e in s.events)
     assert s.data.tensors(s.accepted)[0].isfinite().all()  # gaps are filled for training
+    shutil.rmtree(s.dir)
+
+
+def prepared_session():
+    s = session()
+    files = sorted((BACKEND / "demo_data" / "plant").glob("*.xlsx"))
+    for f in files:
+        s.add_file(f.name, f.read_bytes())
+    Agent(s, ScriptedLLM()).run(upload_message([f.name for f in files]))
+    return s
+
+
+def fake_training(ds, extras, n_bayes, on_round):
+    row = dict(name="x", error_28d_psi=100, vs_baseline_28d=0.0, best=True, folds_won_vs_baseline="0/0",
+               errors_by_age_psi={"28d": 100}, settings={}, inputs=extras)
+    return dict(leaderboard=[row], winner=dict(name="x", vs_baseline_28d=0.0, error_28d_psi=100), meta_default={},
+                tuning_helped=False, method={}, trained_on=extras)
+
+
+def test_training_tests_the_ingredient_first_and_leaves_it_out_if_it_doesnt_help(monkeypatch, tmp_path):
+    s = prepared_session()
+    tools.use_input(s, "Mill Cert 28d (psi)")
+    monkeypatch.setattr(models, "ROOT", tmp_path)
+    monkeypatch.setattr(models, "save", lambda *_: dict(version="v1", recipes=24))
+    monkeypatch.setattr(automl, "run_automl", fake_training)
+    monkeypatch.setattr(inputs, "_kfold28_many", lambda jobs: [400.0, 399.0, 401.0])  # without, with, shuffled
+
+    result = tools.train(s, use_cache=False)
+
+    assert s.training["trained_on"] == ["Air (%)", "Mill Cert 28d (psi)"]
+    assert result["inputs_left_out"] == ["Silica Fume (lb/cy)"]
+    assert s.accepted == ["Air (%)", "Mill Cert 28d (psi)"]
+    assert s.artifacts["training"]["left_out"] == ["Silica Fume (lb/cy)"]
+    assert {r["column"]: r for r in s.artifacts["data"]["tested"]}["Silica Fume (lb/cy)"]["status"] == "not used"
+    shutil.rmtree(s.dir)
+
+
+def test_an_ingredient_that_helps_stays_and_says_how_much(monkeypatch, tmp_path):
+    s = prepared_session()
+    monkeypatch.setattr(models, "ROOT", tmp_path)
+    monkeypatch.setattr(models, "save", lambda *_: dict(version="v1", recipes=24))
+    monkeypatch.setattr(automl, "run_automl", fake_training)
+    monkeypatch.setattr(inputs, "_kfold28_many", lambda jobs: [400.0, 380.0, 402.0])
+
+    result = tools.train(s, use_cache=False)
+
+    assert s.training["trained_on"] == ["Air (%)", "Silica Fume (lb/cy)"] and result["inputs_left_out"] == []
+    row = {r["column"]: r for r in s.artifacts["data"]["tested"]}["Silica Fume (lb/cy)"]
+    assert row["status"] == "added" and "5% more accurate" in row["why"]
     shutil.rmtree(s.dir)

@@ -219,7 +219,7 @@ const handlers = {
     } else {
       d.className = 'find miss'; d.dataset.card = e.input;
       const since = e.recorded_from ? `Logged since ${day(e.recorded_from)}. ` : '';
-      d.innerHTML = `<div class="h">${esc(name)}: only ${e.mixes_with_value} of ${e.mixes} batches</div><div class="d">${since}On those batches it makes the model's 28-day strength predictions ${pct(e.gain)} more accurate.</div><div class="use"><button class="btn sm" data-input="${esc(e.input)}">Use it in training</button></div>`;
+      d.innerHTML = `<div class="h">${esc(name)}: only ${e.mixes_with_value} of ${e.mixes} batches</div><div class="d">${since}${esc(e.why)}</div><div class="use"><button class="btn sm" data-input="${esc(e.input)}">Use it in training</button></div>`;
     }
     addItem(d);
   },
@@ -282,7 +282,7 @@ const A = {
     </table></div>
     <p class="note">${dropped ? `Left out: ${dropped}. ` : ''}${d.mixes_left_out?.length ? `Mixes left out because a main ingredient is blank: ${esc(d.mixes_left_out.join(', '))}. ` : ''}${d.conversions.length ? 'Converted ' + esc(d.conversions.join(', ')) + '.' : ''}</p>
     ${d.tested?.length ? `<h3>Every other column in your files</h3>
-    <p class="note">Each one was tested on your data. Only the ones that help go in the model.</p>
+    <p class="note">Each one is tested on your data. Only the ones that help go in the model.</p>
     <div class="card scroll-x" style="padding:4px 10px"><table>
       <tr><th>Column</th><th>Result</th><th>Why</th></tr>
       ${d.tested.map(r => `<tr><td>${esc(label(r.column))}<div style="color:var(--ink-3);font-size:12.5px">${esc(r.file)}</div></td><td style="white-space:nowrap"><span class="tag ${r.status === 'added' ? 'new' : r.status === 'partly logged' ? 'miss' : 'base'}">${esc(r.status)}</span></td><td style="color:var(--ink-2);font-size:13px">${esc(r.why)}</td></tr>`).join('')}
@@ -310,7 +310,7 @@ const A = {
       <tr><th>Setup</th><th class="num">28-day prediction error</th><th style="width:40%"></th></tr>
       ${d.rows.map((r, i) => `<tr class="${r.chosen ? 'win' : ''}"><td>${esc(r.row)}${i === 0 ? ' <span class="tag base">baseline</span>' : ''}${r.chosen ? ' <span class="tag new">best</span>' : ''}</td><td class="num">${fmt(r.rmse_28d)} psi</td><td><div class="bar"><span style="width:${r.rmse_28d / max * 100}%;${r.chosen ? '' : 'opacity:.4'}"></span></div></td></tr>`).join('')}
     </table></div>
-    <p class="note">Saved as model ${esc(d.model.version)}. ${changes.length ? 'Tuned settings: ' + changes.join(', ') + '.' : "Re-tuning didn't improve the final model, so it keeps Meta's settings."}${ahead ? ' The best setup is picked on all test ages, so another row can be slightly ahead at 28 days alone.' : ''}${d.reused ? ' These numbers come from an earlier identical run on the same data.' : ''} psi is pounds per square inch, the US unit of concrete strength (1,000 psi ≈ 6.9 MPa).</p>`;
+    <p class="note">Saved as model ${esc(d.model.version)}. ${changes.length ? 'Tuned settings: ' + changes.join(', ') + '.' : "Re-tuning didn't improve the final model, so it keeps Meta's settings."}${ahead ? ' The best setup is picked on all test ages, so another row can be slightly ahead at 28 days alone.' : ''}${d.left_out?.length ? ` Training tested ${d.left_out.map(c => esc(label(c))).join(', ')} and left ${d.left_out.length > 1 ? 'them' : 'it'} out, because ${d.left_out.length > 1 ? "they didn't" : "it didn't"} help.` : ''}${d.reused ? ' These numbers come from an earlier identical run on the same data.' : ''} psi is pounds per square inch, the US unit of concrete strength (1,000 psi ≈ 6.9 MPa).</p>`;
   }},
 
   results: { t: 'Results', render: d => {

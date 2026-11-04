@@ -4,8 +4,10 @@ Two kinds of candidate, two tests:
 - batch measurements (air, mill cert, truck...): do they explain the scatter
   between batches of the same recipe? That scatter is what BOxCrete's 10 inputs
   can't see. Permutation test within each recipe; no model fit.
-- recipe ingredients BOxCrete has no slot for (silica fume): refit BOxCrete with
-  and without the column, and with a shuffled copy, holding out whole recipes.
+- recipe ingredients BOxCrete has no slot for (silica fume): the data alone can't
+  say, so no model is fitted before training. Training's first step refits BOxCrete
+  with and without the column, and with a shuffled copy, holding out whole recipes
+  (check_ingredients), and leaves out any that don't help.
 """
 
 from __future__ import annotations
@@ -74,56 +76,25 @@ def suggest_inputs(ds: Dataset, progress: Callable[[str], None] = lambda _: None
             results[c]["associated_with"] = _associations(ds, c, [x for x in batch_cands if x != c
                                                                    and results[x]["p"] < P_THRESHOLD])
 
-    # 3. recipe ingredients: honest refits, each vs the same base and a shuffled copy
-    recipe_cands = [c for c, k in ds.candidates.items() if k.level == "recipe"]
-    numeric = []
-    for c in recipe_cands:
-        k = ds.candidates[c]
-        if k.kind == "numeric" and _coverage(ds, c) >= FULL_COVERAGE:
-            numeric.append(c)
-        elif k.kind == "numeric":
-            results[c] = dict(column=c, level="recipe", kind="numeric", coverage=_coverage(ds, c), verdict="collect")
+    # 3. recipe ingredients: testing one takes a refit, so that waits for training (check_ingredients)
+    for c, k in ds.candidates.items():
+        if k.level != "recipe":
+            continue
+        if k.kind == "numeric":
+            results[c] = dict(column=c, level="recipe", kind="numeric", coverage=_coverage(ds, c),
+                              verdict="use" if _coverage(ds, c) >= FULL_COVERAGE else "collect")
         else:
             results[c] = dict(column=c, level="recipe", kind=k.kind, coverage=_coverage(ds, c),
                               verdict="not_tested", reason="a label, not a quantity")
-    if numeric:
-        progress(f"refitting BOxCrete with and without {', '.join(numeric)} (and shuffled copies)")
-        jobs = [_job(ds, accepted)]
-        for c in numeric:
-            jobs += [_job(ds, accepted + [c]), _job(ds, accepted + [c], shuffle=c, rng=rng)]
-        errs = _kfold28_many(jobs)
-        base_err = errs[0]
-        for i, c in enumerate(numeric):
-            with_err, shuffled_err = errs[1 + 2 * i], errs[2 + 2 * i]
-            gain = 1 - with_err / base_err
-            beats_shuffle = 1 - with_err / shuffled_err
-            results[c] = dict(
-                column=c, level="recipe", kind="numeric", coverage=_coverage(ds, c),
-                error_without_psi=round(base_err), error_with_psi=round(with_err),
-                error_shuffled_psi=round(shuffled_err), gain=round(gain, 3),
-                verdict="use" if gain >= MIN_GAIN and beats_shuffle >= MIN_GAIN else "reject",
-            )
-        accepted += [c for c in numeric if results[c]["verdict"] == "use"]
 
-    # 4. incomplete but useful: how much would complete data help, and where are the gaps?
-    collect = [c for c, r in results.items() if r.get("verdict") == "collect"]
-    if collect:
-        progress(f"estimating what complete {', '.join(collect)} would be worth")
-        jobs = []
-        for c in collect:
-            sub = ds.rows[ds.rows["batch"].isin(set(ds.feature(c).dropna().index))]
-            usable = [e for e in accepted if ds.feature(e).reindex(sub["batch"]).notna().all()]
-            jobs += [_job(ds, usable, rows=sub), _job(ds, usable + [c], rows=sub)]
-        errs = _kfold28_many(jobs)
-        for i, c in enumerate(collect):
-            without, with_c = errs[2 * i], errs[2 * i + 1]
-            results[c].update(error_without_psi=round(without), error_with_psi=round(with_c),
-                              gain=round(1 - with_c / without, 3),
-                              batches_with_value=int(ds.feature(c).notna().sum()),
-                              batches_total=int(ds.batches["batch"].nunique()),
-                              missing_by=_missing_by(ds, c), recorded_from=_recorded_from(ds, c))
-            if results[c]["level"] == "recipe" and results[c]["gain"] < MIN_GAIN:
-                results[c]["verdict"] = "reject"  # no permutation test here, so the refit decides
+    # 4. recorded on part of the data: how much of it, and since when?
+    for c, r in results.items():
+        if r["verdict"] == "collect":
+            r.update(batches_with_value=int(ds.feature(c).notna().sum()),
+                     batches_total=int(ds.batches["batch"].nunique()),
+                     missing_by=_missing_by(ds, c), recorded_from=_recorded_from(ds, c))
+            if r["level"] == "batch":
+                r["conditioned_on"] = list(accepted)
 
     order = {"use": 0, "collect": 1, "proxy": 2, "reject": 3, "not_tested": 4}
     ranked = sorted(results.values(), key=lambda r: (order[r["verdict"]], r.get("p", 1)))
@@ -132,9 +103,49 @@ def suggest_inputs(ds: Dataset, progress: Callable[[str], None] = lambda _: None
         collect=[r["column"] for r in ranked if r["verdict"] == "collect"],
         columns=ranked,
         method=dict(batch_test=f"within-recipe permutation test, {N_PERM} shuffles, p < {P_THRESHOLD}",
-                    recipe_test=f"5-fold refit holding out whole recipes; must cut 28-day error by "
-                                f"{MIN_GAIN:.0%} and beat a shuffled copy"),
+                    recipe_test=f"at the start of training: 5-fold refit holding out whole recipes; must cut "
+                                f"28-day error by {MIN_GAIN:.0%} and beat a shuffled copy"),
     )
+
+
+def check_ingredients(ds: Dataset, extras: list[str], progress: Callable[[str], None] = lambda _: None,
+                      seed: int = 0) -> list[dict]:
+    """Training's first step: does each recipe ingredient in `extras` make predictions better?
+
+    Each one against the same base (the complete batch measurements) and a shuffled copy of itself;
+    one recorded on part of the data is judged on the batches that have it.
+    """
+    rng = np.random.default_rng(seed)
+    recipe = [c for c in extras if ds.candidates[c].level == "recipe"]
+    if not recipe:
+        return []
+    base = [c for c in extras if ds.candidates[c].level == "batch" and _coverage(ds, c) >= FULL_COVERAGE]
+    complete = [c for c in recipe if _coverage(ds, c) >= FULL_COVERAGE]
+    partial = [c for c in recipe if c not in complete]
+    progress(f"testing whether {', '.join(recipe)} makes predictions better")
+    jobs = [_job(ds, base)]
+    for c in complete:
+        jobs += [_job(ds, base + [c]), _job(ds, base + [c], shuffle=c, rng=rng)]
+    for c in partial:
+        sub = ds.rows[ds.rows["batch"].isin(set(ds.feature(c).dropna().index))]
+        usable = [e for e in base if ds.feature(e).reindex(sub["batch"]).notna().all()]
+        jobs += [_job(ds, usable, rows=sub), _job(ds, usable + [c], rows=sub)]
+    errs = _kfold28_many(jobs)
+
+    out = []
+    for i, c in enumerate(complete):
+        without, with_c, shuffled = errs[0], errs[1 + 2 * i], errs[2 + 2 * i]
+        gain = 1 - with_c / without
+        out.append(dict(column=c, error_without_psi=round(without), error_with_psi=round(with_c),
+                        error_shuffled_psi=round(shuffled), gain=round(gain, 3),
+                        helps=bool(gain >= MIN_GAIN and 1 - with_c / shuffled >= MIN_GAIN)))
+    start = 1 + 2 * len(complete)
+    for i, c in enumerate(partial):
+        without, with_c = errs[start + 2 * i], errs[start + 2 * i + 1]
+        gain = 1 - with_c / without
+        out.append(dict(column=c, error_without_psi=round(without), error_with_psi=round(with_c),
+                        gain=round(gain, 3), helps=bool(gain >= MIN_GAIN)))
+    return out
 
 
 # --- within-recipe test ------------------------------------------------------------

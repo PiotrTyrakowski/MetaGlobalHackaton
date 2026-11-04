@@ -73,7 +73,7 @@ def validate_data(s: Session) -> dict:
 
 
 def suggest_inputs(s: Session) -> dict:
-    """Test every candidate column. Proven complete ones are added; proven partial ones are offered."""
+    """Test what the data can show without a model. Complete inputs are added; partly logged ones are offered."""
     _need_data(s)
 
     def progress(text: str) -> None:
@@ -82,8 +82,7 @@ def suggest_inputs(s: Session) -> dict:
     found = inputs.suggest_inputs(s.data, progress=progress)
     s.suggestions = found
     s.accepted = list(found["use"])
-    s.offered = {r["column"]: r for r in found["columns"]
-                 if r["verdict"] == "collect" and r.get("gain", 0) >= inputs.MIN_GAIN}
+    s.offered = {r["column"]: r for r in found["columns"] if r["verdict"] == "collect"}
     s.ready_to_train = True
 
     by_name = {r["column"]: r for r in found["columns"]}
@@ -92,12 +91,13 @@ def suggest_inputs(s: Session) -> dict:
                why=_why(by_name[c]))
     for c, r in s.offered.items():
         s.emit("card", kind="input_incomplete", input=c, file=s.data.candidates[c].file, **_counts(s, c),
-               gain=r["gain"], recorded_from=r.get("recorded_from"))
+               why=_why_partial(r, "On those batches it"), recorded_from=r.get("recorded_from"))
     _data_artifact(s)
     return dict(added=s.accepted, offered=list(s.offered), columns=found["columns"], method=found["method"],
-                note="'added' inputs will be used in training. 'offered' inputs are recorded on only part of "
-                     "the batches and stay out unless the user agrees; their gain was measured on the batches "
-                     "that have them, and batches without a value would get the plant's median.")
+                note="'added' inputs will be used in training. Recipe ingredients among them have no test result "
+                     "yet: training tests them first and leaves out any that don't help. 'offered' inputs are "
+                     "recorded on only part of the batches and stay out unless the user agrees; batches without "
+                     "a value would get the plant's median.")
 
 
 def use_input(s: Session, name: str) -> dict:
@@ -132,7 +132,18 @@ def _why(r: dict) -> str:
     """The evidence for an added input, in plain words."""
     if r["level"] == "batch":
         return f"Explains {round(100 * r['scatter_explained'])}% of the strength differences between batches of the same mix."
-    return f"Makes 28-day strength predictions {round(100 * r['gain'])}% more accurate on mixes the model never saw."
+    if "gain" in r:
+        return f"Training tested it: 28-day strength predictions got {round(100 * r['gain'])}% more accurate on mixes the model never saw."
+    return "An ingredient BOxCrete has no input for. Training tests whether it helps."
+
+
+def _why_partial(r: dict, lead: str) -> str:
+    """The evidence for a partly logged input."""
+    if "scatter_explained" not in r:
+        return _why(r)
+    others = [c.split(" (")[0] for c in r.get("conditioned_on", [])]
+    tail = f" that {' and '.join(others)} {'doesn' if len(others) == 1 else 'don'}'t" if others else ""
+    return f"{lead} explains {round(100 * r['scatter_explained'])}% of the strength differences between batches of the same mix{tail}."
 
 
 def _tested(s: Session) -> list[dict] | None:
@@ -144,11 +155,9 @@ def _tested(s: Session) -> list[dict] | None:
         c, verdict = r["column"], r["verdict"]
         if verdict == "use":
             status, why = "added", _why(r)
-        elif verdict == "collect" and c in s.offered:
-            status = "added" if c in s.accepted else "partly logged"
-            why = f"On the batches that have it, 28-day predictions are {round(100 * r['gain'])}% more accurate."
         elif verdict == "collect":
-            status, why = "not used", "Recorded on part of the batches, and it didn't improve predictions on them."
+            status = "added" if c in s.accepted else "partly logged"
+            why = _why_partial(r, "On the batches that have it, it")
         elif verdict == "proxy":
             status, why = "not used", "Linked to strength, but it's a label or date, not a measurement."
             if r.get("associated_with"):
@@ -219,7 +228,7 @@ def offer_training(s: Session) -> None:
 
 
 def train(s: Session, n_bayes: int = 10, use_cache: bool = True) -> dict:
-    """AutoML on the accepted inputs, then save the winner as the next model version.
+    """Test the new ingredients, run AutoML on what's left, then save the winner as the next model version.
 
     A finished run is cached by (data, inputs, budget), so a repeat run can't stall.
     """
@@ -238,10 +247,15 @@ def train(s: Session, n_bayes: int = 10, use_cache: bool = True) -> dict:
     if reused:
         s.training = json.loads(cache.read_text())
     else:
+        checks = inputs.check_ingredients(ds, extras, progress=lambda t: s.emit("tool_progress", text=t[0].upper() + t[1:]))
+        extras = [c for c in extras if c not in {r["column"] for r in checks if not r["helps"]}]
+        running(0, None)
         s.training = automl.run_automl(ds, extras, n_bayes=n_bayes, on_round=running)
+        s.training["ingredient_checks"] = checks
         s.training["finished"] = datetime.now().isoformat(timespec="seconds")
         cache.parent.mkdir(parents=True, exist_ok=True)
         cache.write_text(json.dumps(s.training, default=str))
+    left_out = _apply_checks(s, s.training.get("ingredient_checks", []))
     s.emit("tool_progress", text="Fitting the best setup on all your mixes")
     s.model_meta = models.save(s.plant, ds, s.training, s.mapping)
     s.model = s.model_meta["version"]
@@ -257,14 +271,35 @@ def train(s: Session, n_bayes: int = 10, use_cache: bool = True) -> dict:
         typical_28d_psi=round(float(at_28.median())) if len(at_28) else None,
         rows=[dict(row=r["name"], rmse_28d=r["error_28d_psi"], settings=r["settings"], extra_inputs=r["inputs"],
                    chosen=r["best"]) for r in board],
-        model=dict(version=s.model, mixes=s.model_meta["recipes"]),
+        model=dict(version=s.model, mixes=s.model_meta["recipes"]), left_out=left_out,
     ))
     s.emit("models_updated", model=s.model)
     return dict(ok=True, more_accurate_than_baseline_percent=round(100 * gain), tuning_helped=s.training["tuning_helped"],
-                saved_as=s.model, winner=win["name"], reused_identical_earlier_run=reused,
+                saved_as=s.model, winner=win["name"], reused_identical_earlier_run=reused, inputs_left_out=left_out,
                 leaderboard=[{k: r[k] for k in ("name", "error_28d_psi", "vs_baseline_28d", "best",
                                                 "folds_won_vs_baseline")} for r in board],
                 method=s.training["method"])
+
+
+def _apply_checks(s: Session, checks: list[dict]) -> list[str]:
+    """Record what training found about the ingredients. Returns the ones it left out."""
+    by_name = {r["column"]: r for r in s.suggestions["columns"]} if s.suggestions else {}
+    left_out = []
+    for check in checks:
+        c = check["column"]
+        if c in by_name:
+            by_name[c].update(gain=check["gain"], error_without_psi=check["error_without_psi"],
+                              error_with_psi=check["error_with_psi"])
+        if not check["helps"]:
+            left_out.append(c)
+            if c in by_name:
+                by_name[c]["verdict"] = "reject"
+            if c in s.accepted:
+                s.accepted.remove(c)
+            s.offered.pop(c, None)
+    if checks:
+        _data_artifact(s)
+    return left_out
 
 
 def _run_key(ds: Dataset, extras: list[str], n_bayes: int) -> str:
@@ -418,11 +453,12 @@ SCHEMAS = [
                      "out, assumptions.",
          parameters=_schema()),
     dict(type="function", name="suggest_inputs",
-         description="Test every candidate column on the plant's data: batch measurements by whether they "
-                     "explain the scatter between batches of the same recipe (permutation test); recipe columns "
-                     "by refitting BOxCrete with and without them. Verdicts: use, collect (useful but on part of "
-                     "the batches), proxy (matters but is a label or date standing for another column), reject, "
-                     "not_tested. Returns 'added' (now used in training) and 'offered' (the user decides).",
+         description="Sort every candidate column, without fitting a model: batch measurements by whether they "
+                     "explain the scatter between batches of the same recipe (permutation test). Recipe "
+                     "ingredients have no test result yet: training tests them and leaves out any that don't "
+                     "help. Verdicts: use, collect (on part of the batches), proxy (matters but is a label or "
+                     "date standing for another column), reject, not_tested. Returns 'added' (now used in "
+                     "training) and 'offered' (the user decides).",
          parameters=_schema()),
     dict(type="function", name="use_input",
          description="Use an offered partly logged input in training, once the user has agreed.",

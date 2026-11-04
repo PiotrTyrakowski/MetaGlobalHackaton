@@ -22,7 +22,7 @@ This version runs Michal's engine under Piotr's app. From Michal's `alt-full-sta
    - The agent maps the columns to BOxCrete's schema and converts units.
    - **Feature discovery is generic, not hard-coded.** Our code tests every extra column the files have, and nothing in the agent's prompt names the demo's columns. Useful full columns are added automatically; the agent says so in one message. Two kinds of column, two tests:
      - **Batch measurements** (air, mill cert, slump, truck…): does the column explain the scatter between batches *of the same recipe*? That scatter is exactly what BOxCrete's 10 inputs can't see. Permutation test within each design (4,000 shuffles, no model fit). Columns that pass but only stand in for something else (a cement lot, a date) are not used as inputs.
-     - **Recipe ingredients BOxCrete has no slot for** (silica fume): honest model comparison, refit with vs without the column and vs a shuffled copy; it must cut the 28-day error by at least 3%.
+     - **Recipe ingredients BOxCrete has no slot for** (silica fume): the first step of training is an honest model comparison, refit with vs without the column and vs a shuffled copy; it must cut the 28-day error by at least 3%, or training leaves it out. No model is fitted before the user presses Train.
    - Tried and rejected: ranking by the baseline's errors on one-batch-per-mix data (chance correlations as big as the real effects on 46 mixes), and comparing BOxCrete's lengthscales against shuffled shadow columns (too noisy).
    - **Partly logged columns are the user's call.** If a useful column only covers part of the batches, the agent says what it is, how much of the data has it and since when, and asks. The card has a "Use it in training" button, and agreeing in chat works too. Gaps are filled with the plant's median.
    - On the synthetic demo (measured 2026-11-04):
@@ -30,8 +30,8 @@ This version runs Michal's engine under Piotr's app. From Michal's `alt-full-sta
      | Column | Coverage | Measured | Verdict |
      |---|---|---|---|
      | Air (%) | 100% | explains 42% of the scatter within recipes, p < 0.001 | added |
-     | Silica fume (lb/cy) | 100% | with air: 399 → 383 psi (−4%) | added |
-     | Mill cert 28d (psi) | 69%, since 2026-06-12 | explains 69% of the scatter, p < 0.001; 462 → 342 psi on batches that have it | offered, the user decides |
+     | Silica fume (lb/cy) | 100% | tested in training, with air: 399 → 383 psi (−4%) | added |
+     | Mill cert 28d (psi) | 69%, since 2026-06-12 | explains 69% of the scatter air doesn't, p < 0.001 | offered, the user decides |
      | Cement lot, date | 100% | p < 0.001, but they stand in for the cement lot | not inputs |
      | Operator, truck, batch time, slump, conc temp | 100% | no clear link (p ≥ 0.01) | rejected |
    - Mill certs come **per cement lot**. The plant started logging them later, so the 4 earliest of 13 lots have none.
@@ -148,7 +148,7 @@ backend/   FastAPI (Python 3.12), one process serves the API and the page
     units.py      lb/cy, gal/cy, oz/cwt, °F, MPa -> BOxCrete units
     dataset.py    apply the agent's mapping: recipes / batches / tests -> one table + candidate columns
     validate.py   coverage, ranges vs Meta's training data, cleaned cells, assumptions
-    inputs.py     suggest_inputs: within-recipe permutation test + honest refits
+    inputs.py     suggest_inputs: within-recipe permutation test; check_ingredients: honest refits at the start of training
     boxfit.py     fit / predict / k-fold refits (parallel worker pool)
     automl.py     BoTorch search and re-check; models.py saved versions; design.py CO2 proposals
     static/index.html  the page (one file, no build step)
