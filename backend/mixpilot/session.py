@@ -11,21 +11,32 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from mixpilot.automl import BACKEND
+from mixpilot import excel
+from mixpilot.dataset import Dataset
+from mixpilot.excel import Sheet
 
+BACKEND = Path(__file__).resolve().parent.parent
 WORKSPACE = BACKEND / "workspace"
-MODELS_DIR = WORKSPACE / "models"
+PLANT = "plant"  # one plant per install; its models live in models/plant/
 
 
 @dataclass
 class Session:
     id: str
     dir: Path
+    plant: str = PLANT
     files: list[Path] = field(default_factory=list)
-    mapping: dict | None = None  # base mapping from prepare_data, plus extra_inputs
+    sheets: list[Sheet] = field(default_factory=list)
+    mapping: dict | None = None
+    data: Dataset | None = None
+    map_report: dict | None = None
+    validation: dict | None = None
+    suggestions: dict | None = None
     accepted: list[str] = field(default_factory=list)  # extra inputs used for training
-    tested: dict[str, dict] = field(default_factory=dict)  # partial inputs -> measured gain
+    offered: dict[str, dict] = field(default_factory=dict)  # partly logged inputs the user can switch on
     ready_to_train: bool = False  # prepared data that has not been trained on yet
+    training: dict | None = None
+    model_meta: dict | None = None
     model: str | None = None  # model version this conversation works with
     previous_response_id: str | None = None
     pending_input: list[dict] = field(default_factory=list)  # tool results a failed call didn't deliver
@@ -37,10 +48,6 @@ class Session:
     @property
     def uploads(self) -> Path:
         return self.dir / "uploads"
-
-    @property
-    def dataset(self) -> Path:
-        return self.dir / "dataset.csv"
 
     def emit(self, type_: str, **data) -> dict:
         with self._lock:
@@ -58,8 +65,17 @@ class Session:
         self.uploads.mkdir(parents=True, exist_ok=True)
         path = self.uploads / Path(name).name
         path.write_bytes(content)
+        try:
+            sheets = excel.read_sheets(path)
+        except Exception as e:
+            path.unlink(missing_ok=True)
+            raise ValueError(f"{path.name} couldn't be read. Is it a real Excel or CSV file?") from e
+        if not sheets:
+            path.unlink(missing_ok=True)
+            raise ValueError(f"{path.name} is empty.")
         if path not in self.files:
             self.files.append(path)
+        self.sheets = [s for s in self.sheets if s.upload != path.name] + sheets
         return path
 
 

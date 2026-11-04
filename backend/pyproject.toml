@@ -3,26 +3,26 @@ name = "mixpilot"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "torch>=2.0.0",
-    "botorch>=0.18.0",
-    "gpytorch>=1.15.2",
-    "linear_operator>=0.6.0",
-    "pandas>=1.5.0",
-    "numpy>=1.20.0",
-    "scipy>=1.10.0",
-    "matplotlib>=3.5.0",
+    "boxcrete",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "openai>=1.50",
+    "pandas>=2.2",
     "openpyxl>=3.1",
-    "openai>=3.42.1",
-    "fastapi>=0.162.0",
-    "uvicorn[standard]>=0.54.0",
+    "python-dotenv>=1.0",
     "python-multipart>=0.0.33",
-    "python-dotenv>=1.2.4",
+    "xlrd>=2.0.2",
 ]
+
+[dependency-groups]
+dev = ["pytest>=8", "parameterized>=0.9"]
+
+[tool.uv.sources]
+boxcrete = { path = "vendor/SustainableConcrete", editable = true }
 
 [tool.uv]
 package = false
 
-[dependency-groups]
-dev = [
-    "pytest>=9.2.0",
-]
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

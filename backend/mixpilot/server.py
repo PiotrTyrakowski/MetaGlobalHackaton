@@ -6,20 +6,25 @@ Run from backend/:  uv run uvicorn mixpilot.server:app --port 8000
 import asyncio
 import json
 import threading
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from mixpilot import tools
+from mixpilot import boxfit, tools
 from mixpilot.agent import Agent, training_message, upload_message
 from mixpilot.session import BACKEND, SESSIONS, Session, new_session
 
-app = FastAPI(title="MixPilot")
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
-                   allow_methods=["*"], allow_headers=["*"])
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    threading.Thread(target=boxfit.warm_up, daemon=True).start()
+    yield
+
+
+app = FastAPI(title="MixPilot", lifespan=lifespan)
 
 
 class NewSession(BaseModel):
@@ -73,12 +78,22 @@ def create_session(body: NewSession | None = None):
 @app.post("/api/sessions/{sid}/files")
 async def upload(sid: str, files: list[UploadFile]):
     s = _session(sid)
-    names = []
+    if s.busy:
+        raise HTTPException(409, f"busy: {s.busy}")
+    names, unreadable = [], []
     for f in files:
         if not f.filename.lower().endswith((".xlsx", ".xls", ".csv")):
-            raise HTTPException(400, f"{f.filename}: only Excel or CSV files")
-        s.add_file(f.filename, await f.read())
-        names.append(f.filename)
+            unreadable.append(f"{f.filename}: only Excel or CSV files.")
+            continue
+        try:
+            s.add_file(f.filename, await f.read())
+            names.append(f.filename)
+        except ValueError as e:
+            unreadable.append(str(e))
+    if not names:
+        raise HTTPException(400, " ".join(unreadable))
+    for text in unreadable:
+        s.emit("error", text=text)
     _after_upload(s, names)
     return {"files": names}
 
@@ -97,7 +112,7 @@ def post_message(sid: str, body: Message):
 
 @app.post("/api/sessions/{sid}/inputs")
 def use_input(sid: str, body: InputName):
-    """The card's "Use it" button: train with a partly recorded input."""
+    """The card's "Use it in training" button: train with a partly logged input."""
     s = _session(sid)
     if s.busy:
         raise HTTPException(409, f"busy: {s.busy}")
@@ -112,7 +127,7 @@ def use_input(sid: str, body: InputName):
 @app.post("/api/sessions/{sid}/train")
 def start_training(sid: str):
     s = _session(sid)
-    if s.mapping is None:
+    if s.data is None:
         raise HTTPException(400, "data is not prepared yet")
 
     def job():

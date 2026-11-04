@@ -1,6 +1,10 @@
+.env
+*.env
 .venv/
 __pycache__/
-*.pyc
-.env
-.DS_Store
+backend/models/
+backend/demo_data/automl_last.json
+backend/uploads/
 backend/workspace/
+*.pyc
+.DS_Store

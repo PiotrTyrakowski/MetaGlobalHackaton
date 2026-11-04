@@ -1,39 +1,42 @@
 """Agent loop on Meta Muse Spark (Responses API, tool calling, streamed text).
 
-The model plans and talks; tools in mixpilot.tools do every computation.
-Turns are chained with previous_response_id, so reasoning carries across
-tool calls. Instructions and tools are resent on every call because the
-Model API does not carry them over.
+The model plans and talks; tools in mixpilot.tools do every computation. Training
+is not one of its tools: only the Train model button starts it, and the agent
+hears about it afterwards.
+
+Turns are chained with previous_response_id, so reasoning carries across tool
+calls. Instructions and tools are resent on every call because the Model API
+does not carry them over.
 """
 
 import json
 import os
+import time
 from dataclasses import dataclass, field
 
 from dotenv import load_dotenv
 
 from mixpilot import tools
-from mixpilot.automl import BACKEND
-from mixpilot.session import Session
+from mixpilot.session import BACKEND, Session
 
 MAX_STEPS = 15
+RETRIES = 3
 
-SYSTEM = """You are MixPilot, an assistant for a ready-mix concrete plant. You retrain Meta's BOxCrete concrete-strength model on the plant's own data and help the plant use it.
+SYSTEM = """You are MixPilot, an assistant for a ready-mix concrete plant's QC team. You retrain Meta's BOxCrete concrete-strength model on the plant's own data, and you find columns in their files that make it more accurate.
 
 How a session goes:
-1. When files arrive, call inspect_files, then prepare_data with a mapping from the plant's columns to BOxCrete's inputs. If a tool returns an error, fix the call and try again. Exclude strength tests that a notes column marks as invalid.
-2. Look at candidate_inputs. Pick real material or process properties that BOxCrete does not use. Skip IDs, dates, outcomes (results of the mix, not inputs to it) and anything that duplicates a mapped input.
-   - The single most useful one recorded for at least 90% of mixes: add_input.
-   - The single most useful one recorded for fewer mixes: test_input. Then tell the user how much more accurate it made the predictions on the mixes that have it, and ask whether to use it in training. The card has a button for that; if the user agrees in chat, call use_input.
-3. End your turn with a short summary. The app then shows a Train button; the user starts training with it.
-4. When a message says training finished, call propose_mixes (extra inputs stay at the plant's typical value unless the user asks for another). Then reply.
-Later the user may ask about the model or a mix: use predict_strength or list_models.
+1. When files arrive, call read_files, map_columns, validate_data and suggest_inputs, in that order, without stopping.
+   - map_columns: map every BOxCrete field you can find, with its unit. A cementitious material BOxCrete has no field for goes under recipes.other_cementitious. Put in ignore only a column that holds the tested concrete's own strength result or its target (a specified or design strength). A test of a raw material is an input, not a result. Leave every other column unmapped: unmapped columns are the candidates for new inputs. Read the values of any notes column and use tests.exclude to drop cylinders it marks as invalid tests. If the tool returns errors, fix the mapping and call it again. Its result lists notes_still_counted: text on cylinders that still count as valid. If a value there says the test failed, the specimen was damaged or the test has to be repeated, call map_columns again with it in tests.exclude. A note about something else stays.
+   - If the files don't hold what BOxCrete needs (each mix's ingredients and strength tests by age), or the errors can't be fixed, stop and say in plain words what is missing. Never make data up.
+2. Then write one message. Say what you read and which inputs you added ('added' in the tool's result). If 'offered' lists an input, it is useful but recorded on only part of the batches: say in a few plain words what it is and how much of the data has it (if recorded_from is set, say the plant started logging it then), and ask whether to use it in training. The card has a button for that; if the user agrees in chat, call use_input. Otherwise invite them to press Train model. You cannot start training yourself; if asked, point them to the button.
+3. When a message says training finished, call get_results right away. Then reply: how much more accurate the model is than Meta's default setup retrained on their data (more_accurate_than_baseline_percent), honestly whether re-tuning Meta's settings helped (tuning_helped), and how much less CO2 the proposed mixes need (co2_saving_percent).
+Later the user may ask about the model or a mix: use predict or list_models.
 
 Style:
 - Work silently: write no text before or between tool calls, since the screen shows each step as it runs. Write one message when the turn is done.
-- Keep that message to 1-3 short sentences. No headings, tables or bullet lists: the screen already shows cards and panels with the details.
-- Quote only numbers a tool returned. Use the plant's units (psi, lb/yd3).
-- Say an improvement as a percentage ("predictions 40% more accurate", from the tool's gain), not as before and after errors: the panels show those.
+- Keep that message to 1-3 short sentences for plant engineers. No headings, tables or bullet lists: the screen already shows cards and panels with the details.
+- Quote only numbers a tool returned. Use recipe IDs and column names exactly as the tools give them.
+- Say an improvement as a percentage ("predictions 40% more accurate"), not as before and after errors: the panels show those. Fields called gain and scatter_explained are fractions (0.26 means 26%): gain says how much more accurate predictions get, scatter_explained how much of the strength differences between batches of one mix a column explains.
 - Don't explain tools or mapping details unless asked.
 - Messages starting with [app] come from the application, not the user."""
 
@@ -115,7 +118,7 @@ class Agent:
                 s.emit("text_delta", message=msg, text=delta)
 
             try:
-                step = self.llm.step(items, s.previous_response_id, on_text)
+                step = self._call(items, on_text, lambda: msg is not None)
             except Exception as e:  # keep tool results so the next turn can deliver them
                 s.pending_input = [i for i in items if i.get("type") == "function_call_output"]
                 s.emit("error", text=str(e)[:500])
@@ -133,14 +136,26 @@ class Agent:
                     args = json.loads(c.arguments or "{}")
                     result = tools.call(s, c.name, args if isinstance(args, dict) else {})
                 except json.JSONDecodeError as e:
-                    result = {"error": f"arguments are not valid JSON: {e}"}
+                    result = dict(ok=False, errors=[f"arguments are not valid JSON: {e}"])
                 except Exception as e:  # a bug on our side; tell the model instead of crashing the turn
-                    result = {"error": f"{type(e).__name__}: {e}"}
-                s.emit("tool", name=c.name, status="error" if "error" in result else "done",
+                    result = dict(ok=False, errors=[f"{type(e).__name__}: {e}"])
+                s.emit("tool", name=c.name, status="error" if result.get("ok") is False else "done",
                        label=tools.LABELS.get(c.name, c.name))
                 items.append({"type": "function_call_output", "call_id": c.call_id,
                               "output": json.dumps(result, default=str)})
+        s.pending_input = items
         s.emit("error", text=f"stopped after {MAX_STEPS} steps")
+
+    def _call(self, items: list[dict], on_text, text_shown) -> Step:
+        """One model call. Retried only while no text has reached the screen."""
+        for attempt in range(RETRIES):
+            try:
+                return self.llm.step(items, self.s.previous_response_id, on_text)
+            except Exception:
+                if text_shown() or attempt == RETRIES - 1:
+                    raise
+                time.sleep(2 * (attempt + 1))
+        raise AssertionError("unreachable")
 
 
 def training_message(result: dict) -> str:
