@@ -979,6 +979,7 @@ const handlers = {
       toolStart(e.label);
     } else {
       toolsFinish();
+      S.status = 'Thinking…';  // the agent is writing its reply, not still on this step
       if (e.name === 'suggest_inputs' && e.status === 'done') {
         S.prep.step = 4; S.prep.note = ''; S.prep.tested = true;
         toolsCollapse('Prepared your data in 4 steps');
