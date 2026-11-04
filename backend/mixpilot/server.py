@@ -37,6 +37,7 @@ class Message(BaseModel):
 
 class InputName(BaseModel):
     name: str
+    use: bool = True
 
 
 def _session(sid: str) -> Session:
@@ -112,12 +113,12 @@ def post_message(sid: str, body: Message):
 
 @app.post("/api/sessions/{sid}/inputs")
 def use_input(sid: str, body: InputName):
-    """The card's "Use it in training" button: train with a partly logged input."""
+    """The card's buttons: train with a partly logged input, or leave it out."""
     s = _session(sid)
     if s.busy:
         raise HTTPException(409, f"busy: {s.busy}")
     try:
-        tools.use_input(s, body.name)
+        (tools.use_input if body.use else tools.leave_out_input)(s, body.name)
     except tools.ToolError as e:
         raise HTTPException(400, str(e))
     tools.offer_training(s)

@@ -35,7 +35,7 @@ This version runs Michal's engine under Piotr's app. From Michal's `alt-full-sta
      | Cement lot, date | 100% | p < 0.001, but they stand in for the cement lot | not inputs |
      | Operator, truck, batch time, slump, conc temp | 100% | no clear link (p ≥ 0.01) | rejected |
    - Mill certs come **per cement lot**. The plant started logging them later, so the 4 earliest of 13 lots have none.
-   - Cleanup is automatic and shown under the Data panel: IDs match ignoring case and punctuation, cylinders a notes column marks as invalid are excluded (the agent decides from the note values), and breaks after 28 days are dropped. `map_columns` returns `notes_still_counted`, so the agent reads what's left and can call it again: without that, it skipped the exclusions on 2 of 3 runs. A mapping that leaves no usable tests fails with an error. On the demo, Muse Spark excludes "cap failure" and also "chipped edge" (6 each), which the generator treats as valid: 841 of 880 cylinders used on 3 of 3 runs, against 847 with the hand-written mapping. Harmless, and defensible.
+   - Cleanup is automatic and shown in the Prepare view: IDs match ignoring case and punctuation, cylinders a notes column marks as invalid are excluded (the agent decides from the note values), and breaks after 28 days are dropped. `map_columns` returns `notes_still_counted`, so the agent reads what's left and can call it again: without that, it skipped the exclusions on 2 of 3 runs. A mapping that leaves no usable tests fails with an error. On the demo, Muse Spark excludes "cap failure" and also "chipped edge" (6 each), which the generator treats as valid: 841 of 880 cylinders used on 3 of 3 runs, against 847 with the hand-written mapping. Harmless, and defensible.
 3. **Train (button):** an AutoML run on the plant's data only (Meta's 670 rows are not pooled). The **baseline is Meta's default setup retrained on the plant's data**; we always retrain, so Meta's untrained model is not shown. One button, fixed budget, no user knobs. Leaderboard rows:
    - Meta default, retrained (baseline);
    - plus tuned settings;
@@ -53,8 +53,8 @@ This version runs Michal's engine under Piotr's app. From Michal's `alt-full-sta
 ## UI principle
 
 As simple as possible. **Everything on screen is either something we add on top of BOxCrete, or something that has to be there.** Nothing else. That means:
-- the new inputs and the partly logged input as cards; every other column and why it isn't used as one small table in the Data panel;
-- three artifacts (Data, Training, Results) plus the Models tab;
+- a timeline across the top with five phases (Upload, Prepare, Review, Train, Results), each with its own full view, plus Models; the chat floats over the views and stays visible in every phase;
+- the new inputs and the partly logged input in the Review view; every other column and why it isn't used as one small table there;
 - short agent messages (1–3 sentences; cards and panels carry the numbers), with improvements as percentages, not "drops from X to Y";
 - **extremely clean**: each panel shows a headline and one chart or table.
 
@@ -156,7 +156,7 @@ backend/   FastAPI (Python 3.12), one process serves the API and the page
   vendor/SustainableConcrete/  vendored BOxCrete with the extra-input patch (uv path dependency)
   demo_data/    the plant's Excel files, truth.json, mapping.json (hand-written mapping for tests and scripts)
   models/       saved model versions and the run cache (gitignored)
-  API: POST /api/sessions · POST /api/sessions/{id}/files · POST /api/sessions/{id}/messages · POST /api/sessions/{id}/inputs · POST /api/sessions/{id}/train · GET /api/sessions/{id}/events (SSE) · GET /api/models
+  API: POST /api/sessions · POST /api/sessions/{id}/files · POST /api/sessions/{id}/messages · POST /api/sessions/{id}/inputs (use or leave out) · POST /api/sessions/{id}/train · GET /api/sessions/{id}/events (SSE) · GET /api/models
 ```
 
 ## Order of work
@@ -168,7 +168,7 @@ backend/   FastAPI (Python 3.12), one process serves the API and the page
 5. [x] AutoML + leaderboard + model save (`models/<plant>/v<n>/`), results (CO₂ vs strength, 3 proposals ~30% less CO₂, batch conditions like air kept fixed), predict.
 6. [x] Agent loop on Muse Spark + SSE (`mixpilot/agent.py`, `mixpilot/server.py`). Reasoning effort `low`. Only the Train model button starts training; the model has no such tool and is told when it finishes. Measured: first turn ~80 s, training 3–4 min fresh, seconds when cached.
    - Run: `cd backend && PYTHONPATH=. uv run uvicorn mixpilot.server:app --port 8000`. Tests: `cd backend && uv run pytest`.
-7. [x] Frontend: chat + 3 artifacts + Models tab in one static page (`mixpilot/static/index.html`), following the session's SSE stream and replaying it after a reload.
+7. [x] Frontend: phase timeline + floating chat + one view per phase + Models in one static page (`mixpilot/static/index.html`), following the session's SSE stream and replaying it after a reload.
    - Demo prep: the AutoML cache is keyed by the mapped data, and the agent's mapping can differ slightly between sessions, so do one warm-up run before recording.
 8. [x] Merge Michal's engine under this app, and move the partly logged story to mill certs (branch `mixpilot-merged`).
 9. [ ] Demo video (2–3 min) + submission.

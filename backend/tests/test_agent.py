@@ -122,10 +122,25 @@ def test_prep_turn_adds_two_inputs_and_offers_the_partly_logged_one(monkeypatch)
     assert tested["Cement Lot"]["status"] == "not used" and "a label or date" in tested["Cement Lot"]["why"]
     assert all(len(c["points"]) == 3 for c in data["output"]["curves"])
 
+    prep = s.artifacts["prep"]
+    assert [f["file"] for f in prep["files"]] == [f.name for f in files] and prep["joins"]
+    fields = {r["field"]: r for r in prep["mapped"]}
+    assert fields["Cement"]["change"] == "lb/yd³ → kg/m³" and fields["Curing temperature"]["change"] == "°F → °C"
+    assert prep["cylinders_read"] == 880 and prep["cylinders_used"] == data["cylinders_used"] and prep["issues"]
+
+    days = mill["timeline"]
+    assert len(days) == mill["mixes"] and days == sorted(days, key=lambda d: d["date"])
+    assert sum(d["has"] for d in days) == mill["mixes_with_value"]
+    assert days[0]["has"] is False and days[-1]["has"] is True  # logging started later
+
     tools.use_input(s, "Mill Cert 28d (psi)")
     assert s.accepted[-1] == "Mill Cert 28d (psi)"
     assert any(e["type"] == "input_used" for e in s.events)
     assert s.data.tensors(s.accepted)[0].isfinite().all()  # gaps are filled for training
+
+    tools.leave_out_input(s, "Mill Cert 28d (psi)")  # the plant can change its mind before training
+    assert "Mill Cert 28d (psi)" not in s.accepted
+    assert any(e["type"] == "input_left_out" for e in s.events)
     shutil.rmtree(s.dir)
 
 
@@ -140,9 +155,9 @@ def prepared_session():
 
 def fake_training(ds, extras, n_bayes, on_round):
     row = dict(name="x", error_28d_psi=100, vs_baseline_28d=0.0, best=True, folds_won_vs_baseline="0/0",
-               errors_by_age_psi={"28d": 100}, settings={}, inputs=extras)
+               errors_by_age_psi={"28d": 100}, settings={}, inputs=extras, baseline=True)
     return dict(leaderboard=[row], winner=dict(name="x", vs_baseline_28d=0.0, error_28d_psi=100), meta_default={},
-                tuning_helped=False, method={}, trained_on=extras)
+                tuning_helped=False, method={}, trained_on=extras, trials=[])
 
 
 def test_training_tests_the_ingredient_first_and_leaves_it_out_if_it_doesnt_help(monkeypatch, tmp_path):
@@ -176,3 +191,14 @@ def test_an_ingredient_that_helps_stays_and_says_how_much(monkeypatch, tmp_path)
     row = {r["column"]: r for r in s.artifacts["data"]["tested"]}["Silica Fume (lb/cy)"]
     assert row["status"] == "added" and "5% more accurate" in row["why"]
     shutil.rmtree(s.dir)
+
+
+def test_the_search_shows_both_input_sets_round_by_round():
+    trials = [dict(setup="Meta's 10 inputs", source="meta default", error_28d_psi=730),
+              dict(setup="+ air", source="meta default", error_28d_psi=297),
+              dict(setup="Meta's 10 inputs", source="sobol", error_28d_psi=None),
+              dict(setup="+ air", source="sobol", error_28d_psi=293)]
+    assert tools._search(trials) == [dict(round=1, kind="Meta's settings", base=730, plus=297),
+                                     dict(round=2, kind="Exploring", base=None, plus=293)]
+    alone = tools._search([dict(setup="Meta's 10 inputs", source="bayes-opt", error_28d_psi=700)])
+    assert alone == [dict(round=1, kind="Searching", base=700, plus=None)]

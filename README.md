@@ -122,7 +122,7 @@ The model then proposes mixes with about 30% less CO₂ at equivalent predicted 
 - one table with everything, even with no mix IDs;
 - US or metric units.
 
-**What if the data isn't good enough?** It says so plainly. Files that aren't concrete data get an explanation of what's missing. Training needs at least 5 mix designs and at least one break at 21 days or later. A mix with a blank main ingredient is left out, and the Data panel lists what was left out.
+**What if the data isn't good enough?** It says so plainly. Files that aren't concrete data get an explanation of what's missing. Training needs at least 5 mix designs and at least one break at 21 days or later. A mix with a blank main ingredient is left out, and the Prepare view lists what was left out.
 
 **Where does my data go?** The files stay on the machine running the app. Column names, up to 12 sample values per column and our computed results go to the Meta Model API, so Muse Spark can do its job. The full rows aren't sent.
 
@@ -146,9 +146,9 @@ PYTHONPATH=. uv run uvicorn mixpilot.server:app --port 8000
 
 Open http://localhost:8000 and upload the three files in `backend/demo_data/plant/`. Then:
 
-1. Wait for the agent, and click **Use it in training** on the mill certificate card.
-2. Press **Train model**.
-3. Look through the Data, Training and Results panels, and ask something in chat.
+1. Press **Start preparing**, and wait for the agent to move to **Review**.
+2. Click **Use it in training** on the mill certificate card, then press **Train model**.
+3. When **Results** opens, use the timeline at the top to look back at any phase, and ask something in chat.
 
 A finished training run is cached under `backend/models/_cache/`, so a repeat is fast. Delete that folder to run it again for real.
 
@@ -175,7 +175,7 @@ backend/mixpilot/
   automl.py    BoTorch search and re-check
   models.py    saved model versions
   design.py    lower-CO₂ proposals
-  static/      the page (one HTML file, no build step)
+  static/      the page: a phase timeline, one view per phase and a floating chat (one HTML file, no build step)
 backend/vendor/SustainableConcrete/   BOxCrete with a patch for extra inputs
 backend/scripts/                      the demo data generators and checks
 ```
@@ -189,7 +189,7 @@ More detail and measurements are in [docs/PLAN.md](docs/PLAN.md).
 ## Limits
 
 - It hasn't been tried on a real plant's data yet.
-- An LLM's mapping can differ a little between runs, for example in which notes count as invalid tests. The Data panel shows what was left out.
+- An LLM's mapping can differ a little between runs, for example in which notes count as invalid tests. The Prepare view shows what was left out.
 - Each install keeps one list of saved models, so a second plant's models sit beside the first's.
 - Only silica fume has an emission factor among the extra ingredients. Another extra binder would count as zero CO₂.
 - It doesn't read PDFs or photos of lab sheets.
