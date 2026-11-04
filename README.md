@@ -19,9 +19,9 @@ Concrete causes about 6–8% of the world's CO₂, mostly because of its cement,
 |---|---|---|
 | **Read** | Muse Spark | Reads the sheets, works out which column is what and in which units, and reads notes columns to find invalid tests |
 | **Join and convert** | Our code | Converts units and joins recipes, batches and cylinder breaks into one table |
-| **Find new inputs** | Our code | Tests every other column on the plant's own data. Useful ones go in, and the rest stay out with a reason on screen |
+| **Find new inputs** | Our code | Checks every other column against the plant's own data, without fitting a model. Useful ones go in, new ingredients wait for their test in training, and the rest stay out with a reason on screen |
 | **Ask** | Muse Spark and the user | If a useful column was only logged on part of the data, the agent says so and asks whether to use it |
-| **Train** | Our code, on the user's click | Retrains BOxCrete on the plant's data, with and without the new inputs and re-tuned settings, and keeps what proves better |
+| **Train** | Our code, on the user's click | Tests each new ingredient and leaves out any that don't help, then retrains BOxCrete on the plant's data, with and without the new inputs and re-tuned settings, and keeps what proves better |
 | **Use** | Both | Saves the model, proposes lower-CO₂ mixes to test next, and answers questions in chat such as "what does this mix reach at 7 days with 7% air?" |
 
 ## Why this is new
@@ -54,7 +54,7 @@ Concrete causes about 6–8% of the world's CO₂, mostly because of its cement,
 **How a column gets in:**
 
 - **Batch measurements** such as air content: does the column explain the strength differences between batches *of the same recipe*? BOxCrete's inputs can't see those differences, because the recipe is identical. This is a permutation test within each recipe, with 4,000 shuffles and a threshold of p < 0.01.
-- **Ingredients BOxCrete has no input for** such as silica fume: refit the model with the column, without it and with a shuffled copy, holding out whole mixes. It must cut the 28-day error by at least 3% and beat its shuffled copy by at least 3%.
+- **Ingredients BOxCrete has no input for** such as silica fume: the data alone can't say whether they help, so this test is the first step of training. It refits the model with the column, without it and with a shuffled copy, holding out whole mixes. The column must cut the 28-day error by at least 3% and beat its shuffled copy by at least 3%, or it's left out.
 - **Labels and dates** can pass the test but can't go in the model. The app reports them as standing in for something else, such as a cement lot standing in for its certificate.
 - **A column that repeats a strength result** is caught and rejected, because predicting strength from strength proves nothing.
 
@@ -67,8 +67,8 @@ The demo plant is synthetic: 24 mix designs, 121 batches and 880 cylinders, gene
 | Column | What the tests found | Result |
 |---|---|---|
 | Air | Explains 42% of the strength differences between batches of the same mix | Added |
-| Silica fume | About 4% lower error on mixes the model never saw | Added |
-| Mill certificate (the cement's strength test) | Logged only since June, on 83 of 121 batches; about 28% lower error on those batches | The user decides |
+| Silica fume | Tested in training: about 4% lower error on mixes the model never saw | Added |
+| Mill certificate (the cement's strength test) | Logged only since June, on 83 of 121 batches; on those batches it explains 69% of the differences air doesn't | The user decides |
 | Cement lot, date | Linked to strength, but a label or a date | Not used |
 | Operator, truck, batch time, slump, concrete temperature | No clear link | Not used |
 
