@@ -47,10 +47,7 @@ svg{display:block}
 /* ------------------------------------------------------------------ timeline */
 .topbar{position:fixed;inset:0 0 auto 0;height:var(--top);padding:0 14px 0 16px;display:flex;align-items:center;gap:20px;
   border-bottom:1px solid var(--line);background:var(--bg);z-index:30}
-.brand{flex:none;display:flex;align-items:center;gap:9px;height:30px;font-weight:600;letter-spacing:-.01em}
-.mark{flex:none;width:20px;height:20px;border-radius:6px;background:var(--ink);position:relative;overflow:hidden}
-.mark::after{content:"";position:absolute;inset:6px 4px 3px;border-radius:2px 2px 0 0;
-  background:linear-gradient(90deg,var(--on-ink) 3px,transparent 3px 5px,var(--on-ink) 5px 8px,transparent 8px 10px,var(--on-ink) 10px)}
+.brand{flex:none;font-weight:600;letter-spacing:-.01em}
 #phases{position:relative;flex:1;min-width:0}
 .sel{position:absolute;left:0;top:0;width:0;height:52px;border-radius:12px;background:var(--fill);pointer-events:none;
   transition:transform 260ms var(--ease),width 260ms var(--ease)}
@@ -70,7 +67,7 @@ svg{display:block}
 .navi.on{background:var(--fill);color:var(--ink)}
 .navi .g{display:grid;place-items:center}
 @media (hover:hover) and (pointer:fine){.navi:hover{background:var(--fill)}}
-@media (max-width:1180px){.ph .sb{display:none}.brand span{display:none}.ph{gap:8px}}
+@media (max-width:1180px){.ph .sb{display:none}.ph{gap:8px}}
 @media (max-width:860px){.ph:not([aria-current]) .ph-t{display:none}.ph{padding:0 9px}}
 
 /* ------------------------------------------------------------------ stage */
@@ -377,7 +374,7 @@ body:not(.chat-off) .pillbar{transform:translateY(8px) scale(.96);opacity:0;visi
 <body>
 
 <header class="topbar">
-  <div class="brand"><i class="mark"></i><span>MixPilot</span></div>
+  <div class="brand">MixPilot</div>
   <div id="phases"><div class="sel" id="sel" hidden></div><nav id="phaseList" aria-label="Project phases"></nav></div>
   <button class="navi" id="navModels" data-go="models"><span class="g"><svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M9 2.2 15.2 5.6 9 9 2.8 5.6 9 2.2Z"/><path d="M2.8 9 9 12.4 15.2 9M2.8 12.4 9 15.8l6.2-3.4"/></svg></span><span>Models</span></button>
 </header>
