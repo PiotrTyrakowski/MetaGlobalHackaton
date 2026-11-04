@@ -74,8 +74,8 @@ def propose(model: SingleTaskGP, rec: pd.DataFrame, extras: list[str], batch_ext
     fixed = [cols.index(e) for e in batch_extras]
     lo, hi = rec[RECIPE_FIELDS].min().to_numpy(), rec[RECIPE_FIELDS].max().to_numpy()
 
-    rp = predict_comp(model, rec, extras, [28.0])[28.0]
-    rec = rec.assign(pred_28d=rp[0], gwp=gwp(rec, extras))
+    rp = predict_comp(model, rec, extras, [7.0, 28.0])
+    rec = rec.assign(pred_7d=rp[7.0][0], pred_28d=rp[28.0][0], gwp=gwp(rec, extras))
 
     cands, target = [], []
     for t in range(len(ids)):
@@ -119,7 +119,9 @@ def propose(model: SingleTaskGP, rec: pd.DataFrame, extras: list[str], batch_ext
         proposals.append(dict(
             id=f"P-{len(proposals) + 1}", replaces=rid, co2_saving=round(float(saving), 3),
             gwp_kg_m3=round(float(best["gwp"])), recipe_gwp_kg_m3=round(float(rec.loc[rid, "gwp"])),
-            target_28d_psi=round(float(rec.loc[rid, "pred_28d"])),
+            target_28d_psi=round(float(rec.loc[rid, "pred_28d"])), recipe_7d_psi=round(float(rec.loc[rid, "pred_7d"])),
+            recipe_composition_kg_m3={f: round(float(rec.loc[rid, f]), 1) for f in RECIPE_FIELDS},
+            recipe_extras={e: round(float(rec.loc[rid, e]), 2) for e in extras},
             predicted_28d_psi=round(float(best["pred_28d"])), sd_28d_psi=round(float(best["sd_28d"])),
             lower90_28d_psi=round(float(best["lower_28d"])), predicted_7d_psi=round(float(best["pred_7d"])),
             composition_kg_m3={f: round(float(best[f]), 1) for f in RECIPE_FIELDS},

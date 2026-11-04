@@ -14,6 +14,8 @@ def new_session() -> str:
 
 def test_the_page_is_served():
     assert "MixPilot" in client.get("/").text
+    assert client.get("/concrete-mixer.png").status_code == 200
+    assert client.get("/concrete-mixer-static.png").status_code == 200
 
 
 def test_sessions_start_without_an_api_key(monkeypatch):
@@ -32,6 +34,8 @@ def test_training_needs_mapped_data():
 
 def test_only_offered_inputs_can_be_switched_on():
     r = client.post(f"/api/sessions/{new_session()}/inputs", json={"name": "Truck"})
+    assert r.status_code == 400
+    r = client.post(f"/api/sessions/{new_session()}/inputs", json={"name": "Truck", "use": False})
     assert r.status_code == 400
 
 

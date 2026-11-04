@@ -113,8 +113,9 @@ def n_rounds(n_init: int = 3, n_bayes: int = 10) -> int:
 
 def run_automl(ds: Dataset, inputs: list[str], n_init: int = 3, n_bayes: int = 10,
                progress: Callable[[str], None] = lambda _: None, seed: int = 0,
-               on_round: Callable[[int, float], None] = lambda done, best_28d: None) -> dict:
-    """on_round gets the rounds finished and the 28-day error of the best trial so far."""
+               on_round: Callable[[int, float, dict | None], None] = lambda done, best_28d, latest: None) -> dict:
+    """on_round gets the rounds finished, the 28-day error of the best trial so far, and that round's
+    trials as {source, setup: 28-day error} (None for the re-check, which runs no new trial)."""
     t_start = time.perf_counter()
     setups = {"meta10": [], "plus": list(inputs)} if inputs else {"meta10": []}
     trials: list[Trial] = []
@@ -131,7 +132,8 @@ def run_automl(ds: Dataset, inputs: list[str], n_init: int = 3, n_bayes: int = 1
         best = {k: min(t.score for t in trials if t.setup == k) for k in keys}
         progress(f"{label}: " + ", ".join(f"{_setup_name(k, inputs)} best {best[k]:.1%} error" for k in keys))
         rounds_done += 1
-        on_round(rounds_done, min(trials, key=lambda t: t.score).error_28d)
+        on_round(rounds_done, min(trials, key=lambda t: t.score).error_28d,
+                 dict(source=proposals[keys[0]][1], **{_setup_name(k, inputs): e.error_28d for k, e in zip(keys, evals)}))
 
     run_round({k: (META_DEFAULT, "meta default") for k in setups}, "trial 1 (Meta's settings)")
     for i, s in enumerate(init_points):
@@ -148,7 +150,7 @@ def run_automl(ds: Dataset, inputs: list[str], n_init: int = 3, n_bayes: int = 1
         rows_cfg += [("plus", META_DEFAULT, False), ("plus", best_settings["plus"], True)]
     progress("re-checking the best setups on new fold splits")
     evals = evaluate_many(ds, [(setups[k], s) for k, s, _ in rows_cfg], seeds=RECHECK_SEEDS)
-    on_round(rounds_done + 1, min(trials, key=lambda t: t.score).error_28d)
+    on_round(rounds_done + 1, min(trials, key=lambda t: t.score).error_28d, None)
 
     base = evals[0]
     untuned = {k: e for (k, _, tuned), e in zip(rows_cfg, evals) if not tuned}

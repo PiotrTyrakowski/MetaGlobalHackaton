@@ -5,479 +5,1196 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MixPilot</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
+/* ------------------------------------------------------------------ tokens */
 :root{
-  --bg:#f4f2ee; --panel:#fbfaf8; --card:#ffffff; --line:#e3dfd8; --line-strong:#cfc9bf;
-  --ink:#1f1d1a; --ink-2:#5c5750; --ink-3:#8c867d;
-  --accent:#0f766e; --accent-soft:#0f766e1a; --warn:#c2410c; --warn-soft:#c2410c14; --bad:#b91c1c;
-  --grid:#ebe7e0; --on-accent:#fff;
-  --mono:'IBM Plex Mono',ui-monospace,monospace; --sans:'IBM Plex Sans',system-ui,sans-serif;
+  --bg:#fff; --raise:#fff; --fill:#f5f5f4; --fill-2:#ededec; --line:#ececeb; --line-2:#dcdcda;
+  --ink:#0b0b0b; --ink-2:#55554f; --ink-3:#71716b; --on-ink:#fff;
+  --good:#0b7a5f; --good-soft:#0b7a5f14; --you:#b4540a; --you-soft:#b4540a12; --on-you:#fff;
+  --mark-2:#c4c4c4; --grid:#f0f0ee; --bad:#b91c1c;
+  --glass:rgba(255,255,255,.78); --ring:rgba(0,0,0,.07);
+  --shadow:0 0 0 1px var(--ring),0 1px 2px rgba(0,0,0,.04),0 12px 40px -12px rgba(0,0,0,.16);
+  --sans:'Geist',ui-sans-serif,system-ui,-apple-system,sans-serif; --mono:'Geist Mono',ui-monospace,monospace;
+  --ease:cubic-bezier(.23,1,.32,1); --ease-io:cubic-bezier(.77,0,.175,1); --ease-dr:cubic-bezier(.32,.72,0,1);
+  --top:72px; --chatw:380px; --gap:12px;
 }
-@media (prefers-color-scheme:dark){:root{
-  --bg:#141312; --panel:#1b1a18; --card:#22201e; --line:#33302c; --line-strong:#45413b;
-  --ink:#eeebe6; --ink-2:#b3ada4; --ink-3:#857f76;
-  --accent:#2dd4bf; --accent-soft:#2dd4bf1f; --warn:#fb923c; --warn-soft:#fb923c1a; --bad:#f87171;
-  --grid:#2a2825; --on-accent:#0b1312;
-}}
+[data-theme=dark]{
+  --bg:#0c0c0b; --raise:#161615; --fill:#1b1b19; --fill-2:#262624; --line:#242422; --line-2:#34342f;
+  --ink:#f4f4f2; --ink-2:#b4b4ad; --ink-3:#8d8d86; --on-ink:#0c0c0b;
+  --good:#34d3a6; --good-soft:#34d3a618; --you:#f5a524; --you-soft:#f5a52414; --on-you:#0c0c0b;
+  --mark-2:#5a5a5a; --grid:#1d1d1b; --bad:#f87171;
+  --glass:rgba(22,22,21,.76); --ring:rgba(255,255,255,.09);
+  --shadow:0 0 0 1px var(--ring),0 16px 48px -12px rgba(0,0,0,.7);
+}
+@media (max-width:1320px){:root{--chatw:348px}}
+
 *{box-sizing:border-box}
 html,body{margin:0;height:100%}
-body{background:var(--bg);color:var(--ink);font:14px/1.5 var(--sans);display:flex;flex-direction:column}
-button{font:inherit;color:inherit;cursor:pointer}
-button:disabled{cursor:default;opacity:.55}
-.mono{font-family:var(--mono)}
+body{background:var(--bg);color:var(--ink);font:14px/1.5 var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;color-scheme:light}
+[data-theme=dark] body{color-scheme:dark}
+button,input{font:inherit;color:inherit}
+button{background:none;border:0;padding:0;cursor:pointer}
+button:disabled{cursor:default}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+h1,h2,h3,p{margin:0}
+svg{display:block}
+.mono{font-family:var(--mono);font-size:.92em}
+.muted{color:var(--ink-3)}
+[hidden]{display:none!important}
 
-.top{display:flex;align-items:center;gap:16px;padding:0 18px;height:50px;border-bottom:1px solid var(--line);background:var(--panel)}
-.logo{display:flex;align-items:center;gap:8px;font-weight:600}
-.logo i{width:20px;height:20px;border-radius:6px;background:var(--accent)}
-.nav{display:flex;gap:4px;margin-left:auto;height:100%}
-.nav button{border:0;background:none;padding:0 14px;color:var(--ink-3);border-bottom:2px solid transparent}
-.nav button.on{color:var(--ink);border-bottom-color:var(--accent)}
+/* ------------------------------------------------------------------ timeline */
+.topbar{position:fixed;inset:0 0 auto 0;height:var(--top);padding:0 14px 0 16px;display:flex;align-items:center;gap:20px;
+  border-bottom:1px solid var(--line);background:var(--bg);z-index:30}
+.brand{flex:none;display:flex;align-items:center;gap:9px;height:30px;font-weight:600;letter-spacing:-.01em}
+.mark{flex:none;width:20px;height:20px;border-radius:6px;background:var(--ink);position:relative;overflow:hidden}
+.mark::after{content:"";position:absolute;inset:6px 4px 3px;border-radius:2px 2px 0 0;
+  background:linear-gradient(90deg,var(--on-ink) 3px,transparent 3px 5px,var(--on-ink) 5px 8px,transparent 8px 10px,var(--on-ink) 10px)}
+#phases{position:relative;flex:1;min-width:0}
+.sel{position:absolute;left:0;top:0;width:0;height:52px;border-radius:12px;background:var(--fill);pointer-events:none;
+  transition:transform 260ms var(--ease),width 260ms var(--ease)}
+#phaseList{position:relative;display:flex;align-items:center}
+.ph{flex:none;display:flex;align-items:center;gap:10px;height:52px;padding:0 12px 0 9px;text-align:left;border-radius:12px}
+.ph[aria-disabled=true]{cursor:default}
+.ph .g{flex:none;width:26px;height:26px}
+.ph .nm{display:block;font-weight:550;letter-spacing:-.012em;line-height:17px;font-size:14px}
+.ph .sb{display:block;font-size:12px;color:var(--ink-3);line-height:15px;margin-top:1px;white-space:nowrap}
+.ph.locked .nm{color:var(--ink-3);font-weight:450}
+.ph.waiting .sb{color:var(--you)}
+.ph-t{min-width:0}
+.ln{flex:1;min-width:10px;height:1px;background:var(--line-2)}
+.ln.done{background:var(--ink)}
+@media (hover:hover) and (pointer:fine){.ph:not([aria-disabled=true]):hover{background:var(--fill)}}
+.navi{flex:none;display:flex;align-items:center;gap:8px;height:36px;padding:0 12px 0 9px;border-radius:10px;color:var(--ink-2);box-shadow:inset 0 0 0 1px var(--line)}
+.navi.on{background:var(--fill);color:var(--ink)}
+.navi .g{display:grid;place-items:center}
+@media (hover:hover) and (pointer:fine){.navi:hover{background:var(--fill)}}
+@media (max-width:1180px){.ph .sb{display:none}.brand span{display:none}.ph{gap:8px}}
+@media (max-width:860px){.ph:not([aria-current]) .ph-t{display:none}.ph{padding:0 9px}}
 
-.view{flex:1;min-height:0;display:none}
-.view.on{display:grid}
-#project{grid-template-columns:minmax(360px,40%) 1fr}
-.chat{display:flex;flex-direction:column;border-right:1px solid var(--line);min-height:0;background:var(--panel)}
-.stream{flex:1;overflow:auto;padding:22px;display:flex;flex-direction:column;gap:16px}
-.user{align-self:flex-end;background:var(--card);border:1px solid var(--line);border-radius:12px 12px 4px 12px;padding:10px 12px;max-width:85%}
-.agent{display:flex;flex-direction:column;gap:8px}
-.agent p{margin:0}
-.agent .items,.agent .texts{display:flex;flex-direction:column;gap:8px}
-.agent .items:empty,.agent .texts:empty{display:none}
-.files{display:flex;flex-wrap:wrap;gap:6px}
-.user .files{margin-top:0}
-.user .txt + .files{margin-top:8px}
-.file{font-size:12px;padding:3px 8px;border:1px solid var(--line);border-radius:6px;color:var(--ink-2)}
-.art{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--line-strong);border-radius:10px;background:var(--card);text-align:left;width:100%}
-.art:hover,.art.on{border-color:var(--accent)}
-.art .t{font-weight:500}
-.art .s{font-size:12px;color:var(--ink-3)}
-.art .go{margin-left:auto;color:var(--ink-3);font-size:12px}
-.find{border-radius:10px;padding:10px 12px;border:1px solid}
-.find.new{border-color:var(--accent);background:var(--accent-soft)}
-.find.miss{border-color:var(--warn);background:var(--warn-soft)}
-.find .h{font-weight:600;font-size:13px}
-.find.new .h{color:var(--accent)} .find.miss .h{color:var(--warn)}
-.find .d{font-size:13px;color:var(--ink-2)}
-.find .use{margin-top:8px}
-.btn.sm{padding:5px 12px;font-size:13px}
-.btn{background:var(--accent);color:var(--on-accent);border:0;border-radius:8px;padding:8px 16px;font-weight:500;align-self:flex-start}
-.btn.ghost{background:none;border:1px solid var(--line-strong);color:var(--ink)}
-.status{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-3)}
-.status::before{content:"";width:10px;height:10px;border-radius:50%;border:2px solid var(--line-strong);border-top-color:var(--accent);animation:spin .8s linear infinite}
-.status[hidden]{display:none}
+/* ------------------------------------------------------------------ stage */
+.stage{position:fixed;inset:var(--top) 0 0 0;overflow:auto;scrollbar-gutter:stable}
+.view{padding:44px 56px 132px calc(var(--chatw) + var(--gap) + 56px);min-height:100%}
+body.chat-off .view,body[data-layer=over] .view{padding-left:56px}
+.inner{max-width:880px;margin:0 auto}
+.enter>*{animation:rise 420ms var(--ease) both}
+.enter>*:nth-child(2){animation-delay:50ms}.enter>*:nth-child(3){animation-delay:100ms}.enter>*:nth-child(4){animation-delay:150ms}.enter>*:nth-child(5){animation-delay:200ms}.enter>*:nth-child(n+6){animation-delay:240ms}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.reflow{animation:fade 220ms ease-out}
+@keyframes fade{from{opacity:.4}to{opacity:1}}
+
+.hd{margin-bottom:36px}
+.kick{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--ink-3);margin-bottom:12px}
+.kick .n{font-family:var(--mono);color:var(--ink);font-size:12px}
+.kick i{width:3px;height:3px;border-radius:50%;background:var(--line-2)}
+h1{font-size:60px;line-height:1.02;letter-spacing:-.045em;font-weight:600;text-wrap:balance}
+h1 span{font-weight:300;color:var(--ink-3);letter-spacing:-.04em}
+.lede{margin-top:14px;font-size:16px;line-height:1.5;color:var(--ink-2);max-width:600px;text-wrap:pretty}
+h2{font-size:18px;font-weight:550;letter-spacing:-.018em}
+.sec{margin-top:44px}
+.sec-h{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:14px}
+.sec-h p{font-size:13px;color:var(--ink-3)}
+.fine{font-size:12.5px;line-height:1.5;color:var(--ink-3);text-wrap:pretty}
+.card{border:1px solid var(--line);border-radius:18px;background:var(--raise)}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 18px;border-radius:10px;font-weight:500;letter-spacing:-.01em;transition:transform 140ms var(--ease),opacity 140ms ease,background-color 140ms ease;white-space:nowrap}
+.btn:active:not(:disabled){transform:scale(.97)}
+.btn.pri{background:var(--ink);color:var(--on-ink)}
+.btn.sec-b{border:1px solid var(--line-2);background:var(--raise)}
+.btn.sm{height:32px;padding:0 12px;font-size:13px;border-radius:8px}
+.btn.lg{height:48px;padding:0 24px;font-size:15px;border-radius:12px}
+@media (hover:hover) and (pointer:fine){.btn.pri:not(:disabled):hover{opacity:.84}.btn.sec-b:not(:disabled):hover{background:var(--fill)}}
+.link{color:var(--ink);font-weight:500;text-decoration:underline;text-decoration-color:var(--line-2);text-underline-offset:3px}
+@media (hover:hover) and (pointer:fine){.link:hover{text-decoration-color:var(--ink)}}
+
+/* tags */
+.tag{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:500;white-space:nowrap}
+.tag::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.tag.add{background:var(--good-soft)}.tag.add::before{background:var(--good)}
+.tag.you{background:var(--you-soft)}.tag.you::before{background:var(--you)}
+.tag.no{background:var(--fill);color:var(--ink-2)}.tag.no::before{background:var(--ink-3)}
+
+/* ------------------------------------------------------------------ upload */
+.drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;width:100%;height:300px;text-align:center;border:1px solid var(--line-2);border-radius:22px;transition:background-color 160ms ease,border-color 160ms ease}
+.drop .ic{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:var(--ink);color:var(--on-ink);margin-bottom:14px;transition:transform 200ms var(--ease)}
+.drop b{font-size:18px;font-weight:550;letter-spacing:-.02em}
+.drop span{color:var(--ink-3);font-size:13.5px}
+.drop.compact{height:96px;flex-direction:row;gap:12px;border-radius:16px;margin-bottom:0}
+.drop.compact .ic{width:32px;height:32px;margin:0}.drop.compact b{font-size:14px;font-weight:500;letter-spacing:-.01em}
+.drop.over{background:var(--fill);border-color:var(--ink)}.drop.over .ic{transform:translateY(-4px)}
+@media (hover:hover) and (pointer:fine){.drop:hover{background:var(--fill)}}
+.alt{display:flex;align-items:center;gap:20px;margin-top:20px}
+.files{margin-top:14px}
+.frow{display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.frow:last-child{border-bottom:0}
+.frow .x{width:32px;height:32px;flex:none;border-radius:8px;background:var(--fill);display:grid;place-items:center;font:500 9.5px var(--mono);color:var(--ink-2)}
+.frow b{font-weight:500}
+.frow small{display:block;font-size:12.5px;color:var(--ink-3)}
+.frow .r{margin-left:auto;font-size:12.5px;color:var(--ink-3);white-space:nowrap}
+.pop{animation:rise 320ms var(--ease) both}
+
+/* ------------------------------------------------------------------ prepare */
+.steps{border-top:1px solid var(--line)}
+.step{border-bottom:1px solid var(--line)}
+.step-h{display:flex;align-items:center;gap:14px;width:100%;min-height:68px;padding:12px 0;text-align:left}
+.step-h[disabled]{color:var(--ink-3)}
+.step-g{flex:none;width:24px;height:24px}
+.step-h .tt{font-size:17px;font-weight:550;letter-spacing:-.02em}
+.step-h[disabled] .tt{font-weight:450}
+.step-h .own{display:block;font-size:12.5px;color:var(--ink-3);font-weight:400;letter-spacing:0}
+.step-h .sum{margin-left:auto;font-size:13px;color:var(--ink-2);text-align:right;white-space:nowrap}
+.step-h .chev{flex:none;color:var(--ink-3);transition:transform 180ms var(--ease)}
+.step.open .chev{transform:rotate(180deg)}
+.step-b{padding:2px 0 26px 38px}
+.now{display:flex;align-items:center;gap:9px;margin-bottom:12px;font-size:13px;color:var(--ink-2)}
+.turn{transform-origin:12px 12px;animation:spin .9s linear infinite}
+.dots{display:inline-flex;gap:3px}
+.dots i{width:3px;height:3px;border-radius:50%;background:currentColor;animation:dot 1s infinite}
+@keyframes dot{0%,60%,100%{opacity:.25}30%{opacity:1}}
+.rows .rw{scroll-margin-bottom:96px;display:grid;align-items:center;gap:14px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.rows .rw:last-child{border-bottom:0}
+.rw.map{grid-template-columns:minmax(0,1.2fr) 16px minmax(0,1fr) 124px}
+.rw.map>:last-child{text-align:right}
+.rw.file{grid-template-columns:minmax(0,1fr) auto}
+.rw.test{grid-template-columns:minmax(0,190px) 96px minmax(0,1fr)}
+.rw .tag{justify-self:start}
+.rw .arr{color:var(--ink-3)}
+.rw .why{color:var(--ink-2);font-size:13px;text-wrap:pretty}
+.rw .raw{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rw.pending{color:var(--ink-3)}
+.fall{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:40px}
+.fall .rw{grid-template-columns:minmax(0,1fr) auto}
+.fall .tot{font-weight:550}
+.notes{display:flex;flex-direction:column;gap:9px;font-size:13px;color:var(--ink-2)}
+.notes li{display:flex;gap:9px;list-style:none;text-wrap:pretty}
+.notes{padding:0;margin:0}
+.notes li::before{content:"";flex:none;width:5px;height:5px;margin-top:7px;border-radius:50%;background:var(--ink-3)}
+.notes li.warn::before{background:var(--you)}
+.sub-cap{font-size:12px;color:var(--ink-3);margin:0 0 6px}
+
+/* ------------------------------------------------------------------ review */
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px}
+.stat b{display:block;font-size:30px;font-weight:500;letter-spacing:-.035em;line-height:1.1}
+.stat span{display:block;margin-top:5px;font-size:12.5px;color:var(--ink-3)}
+.decide{margin-top:36px;padding:26px 28px;border-radius:20px;background:var(--raise);box-shadow:0 0 0 1px var(--you),0 0 0 5px var(--you-soft)}
+.decide.settled{box-shadow:0 0 0 1px var(--line);padding:18px 22px}
+.decide-top{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.decide h2{font-size:22px;letter-spacing:-.028em}
+.decide p{margin-top:6px;color:var(--ink-2);max-width:600px;text-wrap:pretty}
+.strip{display:flex;gap:2px;height:36px;margin-top:22px;align-items:stretch}
+.strip i{flex:1;min-width:1px;border-radius:1.5px;background:var(--fill-2)}
+.strip i.has{background:var(--ink)}
+.strip-k{display:flex;justify-content:space-between;margin-top:7px;font-size:12px;color:var(--ink-3);position:relative;height:17px}
+.strip-k em{position:absolute;font-style:normal;color:var(--ink);font-weight:500;transform:none}
+.decide-ft{display:flex;align-items:center;gap:10px;margin-top:22px;flex-wrap:wrap}
+.decide-ft .mt{margin-left:auto;font-size:13px;color:var(--ink-3);text-align:right}
+.decide-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.decide-row b{font-weight:550}
+.inputs{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;height:30px;padding:0 11px;border-radius:8px;background:var(--fill);font-size:13px;color:var(--ink-2)}
+.chip.new{background:var(--ink);color:var(--on-ink);font-weight:500}
+.chip.maybe{background:none;box-shadow:inset 0 0 0 1px var(--you);color:var(--ink)}
+.plus{display:flex;align-items:center;gap:10px;margin:14px 0 10px;font-size:12.5px;color:var(--ink-3)}
+.plus::after{content:"";flex:1;height:1px;background:var(--line)}
+.cta{position:sticky;bottom:20px;margin-top:40px;display:flex;align-items:center;gap:16px;padding:12px 12px 12px 22px;border-radius:18px;background:var(--glass);backdrop-filter:blur(20px) saturate(1.4);-webkit-backdrop-filter:blur(20px) saturate(1.4);box-shadow:var(--shadow);z-index:4}
+.cta .t{min-width:0;font-size:13px;color:var(--ink-3);line-height:1.35}
+.cta .t b{display:block;color:var(--ink);font-size:14px;font-weight:550}
+.cta .btn{margin-left:auto}
+.disc{margin-top:28px}
+.disc summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;font-weight:500;padding:6px 0}
+.disc summary::-webkit-details-marker{display:none}
+.disc summary svg{color:var(--ink-3);transition:transform 180ms var(--ease)}
+.disc[open] summary svg{transform:rotate(180deg)}
+
+/* ------------------------------------------------------------------ train */
+.hero-n{display:flex;align-items:flex-end;gap:40px;flex-wrap:wrap}
+.big{font-size:88px;line-height:.95;font-weight:500;letter-spacing:-.055em}
+.big small{font-size:22px;font-weight:400;letter-spacing:-.02em;color:var(--ink-3);margin-left:6px}
+.big-l{margin-top:12px;font-size:13.5px;color:var(--ink-2);max-width:280px;text-wrap:pretty}
+.rounds{margin-top:36px}
+.pills{display:flex;justify-content:space-between;height:44px}
+.pills i{width:14px;border-radius:99px;background:var(--fill-2);transition:background-color 200ms ease}
+.pills i.on{background:var(--ink)}
+.pills i.cur{background:var(--ink);animation:breathe 1.1s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:1}50%{opacity:.3}}
+.pill-k{position:relative;height:18px;margin-top:9px;font-size:12px;color:var(--ink-3)}
+.pill-k span{position:absolute;white-space:nowrap}
+.pill-k .act{color:var(--ink);font-weight:500}
+.now-line{margin-top:18px;font-size:14px;color:var(--ink-2);display:flex;align-items:center;gap:9px;min-height:21px}
+.board .brow{display:grid;grid-template-columns:minmax(0,1fr) 92px minmax(120px,28%);gap:18px;align-items:center;padding:14px 20px;border-bottom:1px solid var(--line)}
+.board .brow:last-child{border-bottom:0}
+.brow .nm{font-weight:450;text-wrap:pretty}
+.brow.win .nm{font-weight:600}
+.brow small{display:block;font-size:12.5px;color:var(--ink-3);font-weight:400}
+.brow .v{text-align:right;font-weight:500}
+.brow .bar{height:8px;background:var(--fill);border-radius:0 4px 4px 0}
+.brow .bar i{display:block;height:100%;border-radius:0 4px 4px 0;background:var(--mark-2)}
+.brow.win .bar i{background:var(--good)}
+
+/* ------------------------------------------------------------------ results */
+.pay{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px;margin-top:28px;padding-top:24px;border-top:1px solid var(--line)}
+.pay .stat span{text-wrap:pretty}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{flex:1;min-width:150px;padding:12px 14px;border-radius:12px;text-align:left;box-shadow:inset 0 0 0 1px var(--line);transition:box-shadow 160ms ease,transform 140ms var(--ease)}
+.seg button:active{transform:scale(.985)}
+.seg button.on{box-shadow:inset 0 0 0 1.5px var(--ink)}
+.seg b{display:flex;align-items:center;gap:7px;font-weight:550}
+.seg b i{width:9px;height:9px;border-radius:50%;background:var(--good)}
+.seg b em{font-style:normal;margin-left:auto;font-weight:500}
+.seg small{display:block;font-size:12.5px;color:var(--ink-3);margin-top:2px}
+.cmp{width:100%;border-collapse:collapse;font-size:13.5px}
+.cmp th{font-size:12px;font-weight:450;color:var(--ink-3);text-align:right;padding:12px 20px;border-bottom:1px solid var(--line)}
+.cmp td{padding:10px 20px;text-align:right;border-bottom:1px solid var(--line)}
+.cmp tr:last-child td{border-bottom:0}
+.cmp th:first-child,.cmp td:first-child{text-align:left;color:var(--ink-2)}
+.cmp tr.key td{font-weight:550;color:var(--ink)}
+.cmp .pos{font-weight:550}
+.ask{display:flex;align-items:center;gap:12px;margin-top:16px;flex-wrap:wrap}
+.ask p{flex:1;min-width:260px}
+
+/* charts */
+.chart{position:relative}
+.chart svg{overflow:visible}
+.chart text{font-family:var(--sans);font-variant-numeric:tabular-nums}
+.ax{fill:var(--ink-3);font-size:11.5px}
+.ax-t{fill:var(--ink-2);font-size:12px}
+.gl{stroke:var(--grid);stroke-width:1}
+.lbl{fill:var(--ink);font-size:12.5px;font-weight:550}
+.lbl-2{fill:var(--ink-2);font-size:12px}
+.m-ex{fill:var(--mark-2);stroke:var(--bg);stroke-width:2}
+.m-ex.sel-m{fill:var(--ink)}
+.m-pr{fill:var(--good);stroke:var(--bg);stroke-width:2;cursor:pointer}
+.hit{fill:transparent;cursor:default}
+.legend{display:flex;flex-wrap:wrap;gap:18px;font-size:12.5px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.legend i{width:9px;height:9px;border-radius:50%;background:var(--mark-2)}
+.legend i.pr{background:var(--good)}
+.legend i.ink{background:var(--ink)}
+.legend i.ln-k{width:16px;height:2px;border-radius:2px}
+.chart.bleed{margin-top:8px}
+#tip{position:fixed;z-index:60;pointer-events:none;padding:7px 10px;border-radius:9px;background:var(--ink);color:var(--on-ink);font-size:12px;line-height:1.4;max-width:260px;opacity:0;transition:opacity 100ms ease;white-space:pre-line}
+#tip.on{opacity:1}
+
+/* models */
+.models .mrow{display:grid;grid-template-columns:90px minmax(0,1fr) 90px 110px auto;gap:18px;align-items:center;padding:14px 20px;border-bottom:1px solid var(--line)}
+.models .mrow:last-child{border-bottom:0}
+.models .mh{font-size:12px;color:var(--ink-3);padding-top:11px;padding-bottom:11px}
+.empty{padding:64px 24px;text-align:center;color:var(--ink-3)}
+
+/* ------------------------------------------------------------------ chapter veil */
+.chapter{position:absolute;inset:0;z-index:5;background:var(--bg);display:flex;align-items:center;padding:0 56px 8vh calc(var(--chatw) + var(--gap) + 56px)}
+body.chat-off .chapter,body[data-layer=over] .chapter{padding-left:56px}
+.chapter-in{width:100%;max-width:880px;margin:0 auto}
+.chapter .n{font:500 14px var(--mono);color:var(--ink-3);margin-bottom:14px}
+.chapter h1{font-size:112px;letter-spacing:-.055em}
+.chapter p{margin-top:18px;font-size:18px;color:var(--ink-2);max-width:560px}
+
+/* ------------------------------------------------------------------ live chip */
+.live{position:fixed;top:calc(var(--top) + 12px);right:24px;z-index:12;display:inline-flex;align-items:center;gap:9px;height:36px;padding:0 14px;border-radius:99px;background:var(--glass);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:var(--shadow);font-size:13px;font-weight:500;animation:rise 260ms var(--ease) both}
+.live .d{width:7px;height:7px;border-radius:50%;background:var(--ink);animation:breathe 1.2s ease-in-out infinite}
+.live .d.you{background:var(--you);animation:none}
+.live .d.good{background:var(--good);animation:none}
+.live .go{color:var(--ink-3);font-weight:400}
+
+/* ------------------------------------------------------------------ chat overlay */
+.chat{position:fixed;z-index:20;top:calc(var(--top) + var(--gap));bottom:var(--gap);left:var(--gap);width:var(--chatw);display:flex;flex-direction:column;border-radius:20px;
+  background:var(--glass);backdrop-filter:blur(28px) saturate(1.5);-webkit-backdrop-filter:blur(28px) saturate(1.5);box-shadow:var(--shadow);
+  transform-origin:bottom left;transition:transform 300ms var(--ease-dr),opacity 180ms ease,visibility 0s}
+body.chat-off .chat{transform:translateY(10px) scale(.96);opacity:0;visibility:hidden;pointer-events:none;transition:transform 200ms var(--ease-dr),opacity 140ms ease,visibility 0s 200ms}
+.chat-hd{display:flex;align-items:center;gap:11px;padding:14px 14px 12px 16px}
+.chat-id{min-width:0;flex:1}
+.chat-name{font-weight:550;letter-spacing:-.012em;line-height:18px}
+.chat-status{font-size:12.5px;color:var(--ink-3);line-height:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ibtn{flex:none;width:32px;height:32px;border-radius:9px;display:grid;place-items:center;color:var(--ink-2);transition:background-color 140ms ease,transform 140ms var(--ease)}
+.ibtn:active{transform:scale(.94)}
+@media (hover:hover) and (pointer:fine){.ibtn:hover{background:var(--fill)}}
+
+.mixer{flex:none;display:block;width:30px;height:30px}
+.mixer img{display:block;width:30px;height:30px}
 @keyframes spin{to{transform:rotate(360deg)}}
-.err{font-size:13px;color:var(--bad)}
-.composer{margin:0 16px 16px;border:1px solid var(--line-strong);border-radius:12px;background:var(--card);padding:8px 8px 8px 12px;display:flex;gap:8px;align-items:center}
-.composer input[type=text]{flex:1;border:0;outline:0;background:transparent;color:var(--ink);font:14px var(--sans);min-width:0}
-.clip{border:0;background:none;color:var(--ink-3);padding:4px 6px;font-size:13px}
-.empty{margin:auto;text-align:center;color:var(--ink-2);display:flex;flex-direction:column;gap:12px;align-items:center;max-width:320px}
-.empty .btn{align-self:center}
 
-.pane{display:flex;flex-direction:column;min-height:0}
-.ptabs{display:flex;gap:2px;padding:8px 14px 0;border-bottom:1px solid var(--line);min-height:41px}
-.ptab{border:1px solid transparent;border-bottom:0;background:none;padding:7px 14px;border-radius:8px 8px 0 0;color:var(--ink-3)}
-.ptab.on{background:var(--panel);border-color:var(--line);color:var(--ink);margin-bottom:-1px}
-.pbody{flex:1;overflow:auto;padding:24px 28px 40px;background:var(--panel)}
-.pbody h2{margin:0 0 4px;font-size:18px;font-weight:600}
-.pbody h3{margin:28px 0 2px;font-size:15px;font-weight:600}
-.pbody h3 + .note{margin:0 0 12px}
-.lead{color:var(--ink-2);margin:0 0 20px;max-width:680px}
-.note{font-size:12.5px;color:var(--ink-3);max-width:680px}
-.blank{color:var(--ink-3);margin-top:40px;text-align:center}
-.card{border:1px solid var(--line);border-radius:12px;background:var(--card);padding:14px 18px;margin-bottom:14px}
-.big{display:flex;gap:28px;margin-bottom:18px}
-.big .n{font-size:28px;font-weight:600;letter-spacing:-.5px}
-.big .l{font-size:12px;color:var(--ink-3)}
-table{width:100%;border-collapse:collapse}
-th{font-weight:500;color:var(--ink-3);text-align:left;font-size:12px;padding:8px;border-bottom:1px solid var(--line)}
-td{padding:9px 8px;border-bottom:1px solid var(--line)}
-tr:last-child td{border-bottom:0}
-td.num,th.num{text-align:right;font-family:var(--mono);font-size:13px;white-space:nowrap}
-tr.hl-new td{background:var(--accent-soft)}
-tr.hl-miss td{background:var(--warn-soft)}
-tr.win td{background:var(--accent-soft);font-weight:500}
-.bar{height:8px;border-radius:9px;background:var(--grid);overflow:hidden}
-.bar span{display:block;height:100%;background:var(--accent);transition:width .3s}
-.tag{display:inline-block;font-size:11.5px;padding:1px 7px;border-radius:5px;font-weight:500}
-.tag.new{color:var(--accent);background:var(--accent-soft)}
-.tag.miss{color:var(--warn);background:var(--warn-soft)}
-.tag.base{color:var(--ink-2);border:1px solid var(--line)}
-svg text{font-family:var(--sans)}
-.legend{display:flex;gap:16px;font-size:12px;color:var(--ink-2);margin-top:6px}
-.legend i{display:inline-block;width:10px;height:10px;border-radius:9px;margin-right:5px;vertical-align:-1px}
-.scroll-x{overflow-x:auto}
+.stream{flex:1;min-height:0;overflow:auto;padding:8px 16px 16px;display:flex;flex-direction:column;gap:14px;scroll-behavior:smooth;
+  -webkit-mask-image:linear-gradient(to bottom,transparent,#000 14px,#000 calc(100% - 10px),transparent);mask-image:linear-gradient(to bottom,transparent,#000 14px,#000 calc(100% - 10px),transparent)}
+.stream::-webkit-scrollbar{width:0}
+.m-ag{font-size:14.5px;line-height:1.5;letter-spacing:-.005em;text-wrap:pretty}
+.m-ag b{font-weight:600}
+.m-you{align-self:flex-end;max-width:86%;padding:8px 12px;border-radius:14px 14px 4px 14px;background:var(--fill-2);font-size:14px}
+.m-you .ffs{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.m-you .ffs:first-child{margin-top:0}
+.m-you .ff{font-size:12px;color:var(--ink-2)}
+.agent{display:flex;flex-direction:column;gap:12px}
+.agent .tools:empty,.agent .texts:empty,.agent .items:empty{display:none}
+.agent .texts,.agent .items{display:flex;flex-direction:column;gap:10px}
+.m-ag{margin:0}
+.err{font-size:13px;color:var(--bad);text-wrap:pretty}
+.ch{display:flex;align-items:center;gap:9px;width:100%;margin-top:6px;font-size:11.5px;color:var(--ink-3);text-align:left}
+.ch:first-child{margin-top:0}
+.ch b{font-weight:500;color:var(--ink-2)}
+.ch::after{content:"";flex:1;height:1px;background:var(--line)}
+.ch .n{font-family:var(--mono)}
+.tools{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--ink-3)}
+.tools div{display:flex;align-items:center;gap:8px}
+.tools svg{flex:none;color:var(--ink-3)}
+.tools .spin{width:12px;height:12px;border-radius:50%;border:1.5px solid var(--line-2);border-top-color:var(--ink);animation:spin .7s linear infinite;flex:none;margin:0 1px}
+.tools.sum{color:var(--ink-3)}
+.c-ask{padding:13px 14px;border-radius:14px;background:var(--raise);box-shadow:0 0 0 1px var(--you)}
+.c-ask .h{font-weight:550;letter-spacing:-.012em;font-size:13.5px}
+.c-ask .d{font-size:13px;color:var(--ink-2);margin:2px 0 10px;text-wrap:pretty}
+.c-ask .b{display:flex;gap:6px}
+.c-ask.ok{box-shadow:0 0 0 1px var(--line);display:flex;align-items:center;gap:9px;padding:10px 12px;font-size:13px}
+.c-ask.ok .tag{margin-left:auto}
+.sugg{display:flex;flex-direction:column;gap:5px;padding:0 14px 8px;align-items:flex-start}
+.sugg button{padding:6px 11px;border-radius:9px;box-shadow:inset 0 0 0 1px var(--line-2);font-size:12.5px;color:var(--ink-2);text-align:left;transition:background-color 140ms ease,transform 140ms var(--ease);background:var(--raise)}
+.sugg button:active{transform:scale(.98)}
+@media (hover:hover) and (pointer:fine){.sugg button:hover{background:var(--fill)}}
+.composer{display:flex;align-items:center;gap:4px;margin:0 10px 10px;padding:5px;border-radius:14px;background:var(--raise);box-shadow:0 0 0 1px var(--line-2);transition:box-shadow 140ms ease}
+.composer:focus-within{box-shadow:0 0 0 1px var(--ink)}
+.composer input{flex:1;min-width:0;border:0;outline:0;background:none;font-size:14px;padding:0 4px;height:34px}
+.composer input::placeholder{color:var(--ink-3)}
+.send{flex:none;width:34px;height:34px;border-radius:10px;background:var(--ink);color:var(--on-ink);display:grid;place-items:center;transition:transform 140ms var(--ease),opacity 140ms ease}
+.send:active:not(:disabled){transform:scale(.94)}
+.send:disabled{opacity:.25}
 
-#models{padding:28px;overflow:auto}
-#models.on{display:block}
-#models .wrap{max-width:900px;margin:0 auto}
-@media (max-width:900px){#project.on{display:block;overflow:auto}.chat{border-right:0;border-bottom:1px solid var(--line);min-height:70vh}.stream{overflow:visible}.pbody{padding:20px 16px}#models{padding:20px 16px}}
+.pillbar{position:fixed;z-index:20;bottom:16px;left:16px;width:320px;height:52px;display:flex;align-items:center;gap:10px;padding:0 8px 0 11px;border-radius:99px;text-align:left;
+  background:var(--glass);backdrop-filter:blur(24px) saturate(1.5);-webkit-backdrop-filter:blur(24px) saturate(1.5);box-shadow:var(--shadow);
+  transition:transform 260ms var(--ease-dr),opacity 160ms ease,visibility 0s;transform-origin:bottom left}
+body:not(.chat-off) .pillbar{transform:translateY(8px) scale(.96);opacity:0;visibility:hidden;pointer-events:none;transition:transform 160ms var(--ease-dr),opacity 100ms ease,visibility 0s 160ms}
+.pillbar .tx{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13.5px;color:var(--ink-2)}
+.pillbar .ex{flex:none;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--fill);color:var(--ink-2);position:relative}
+.pillbar .ex.un::after{content:"";position:absolute;top:0;right:0;width:9px;height:9px;border-radius:50%;background:var(--you);box-shadow:0 0 0 2px var(--bg)}
+.pillbar:active{transform:scale(.985)}
+
+@media (prefers-reduced-motion:reduce){
+  .enter>*,.pop,.live{animation:fade 200ms ease-out both}
+  .pills i.cur,.live .d{animation:none}
+  .chat,.pillbar,body.chat-off .chat,body:not(.chat-off) .pillbar{transform:none!important}
+  .stream{scroll-behavior:auto}
+}
 </style>
 </head>
 <body>
 
-<header class="top">
-  <div class="logo"><i></i>MixPilot</div>
-  <nav class="nav"><button class="on" data-v="project">Project</button><button data-v="models">Models</button></nav>
+<header class="topbar">
+  <div class="brand"><i class="mark"></i><span>MixPilot</span></div>
+  <div id="phases"><div class="sel" id="sel" hidden></div><nav id="phaseList" aria-label="Project phases"></nav></div>
+  <button class="navi" id="navModels" data-go="models"><span class="g"><svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M9 2.2 15.2 5.6 9 9 2.8 5.6 9 2.2Z"/><path d="M2.8 9 9 12.4 15.2 9M2.8 12.4 9 15.8l6.2-3.4"/></svg></span><span>Models</span></button>
 </header>
 
-<main class="view on" id="project">
-  <section class="chat">
-    <div class="stream" id="stream"></div>
-    <form class="composer" id="composer">
-      <button type="button" class="clip" id="attach" title="Add Excel files">+ Files</button>
-      <input type="text" id="msg" placeholder="Ask about your mixes…" autocomplete="off">
-      <button class="btn" id="send">Send</button>
-    </form>
-    <input type="file" id="picker" accept=".xlsx,.xls,.csv" multiple hidden>
-  </section>
-  <section class="pane">
-    <nav class="ptabs" id="tabs"></nav>
-    <div class="pbody" id="pbody"><p class="blank">Data, training and results appear here.</p></div>
-  </section>
+<main class="stage" id="stage">
+  <div class="view" id="view"></div>
+  <div class="chapter" id="chapter" hidden></div>
 </main>
+<div id="liveSlot"></div>
 
-<main class="view" id="models"><div class="wrap">
-  <h2 style="margin:0 0 4px;font-size:20px">Models</h2>
-  <p class="lead">Models trained on your data. Use one in chat to predict a mix.</p>
-  <div id="modelList"></div>
-</div></main>
-
+<section class="chat" id="chat" aria-label="Chat with MixPilot">
+  <header class="chat-hd">
+    <picture class="mixer"><source srcset="concrete-mixer-static.png" media="(prefers-reduced-motion: reduce)"><img src="concrete-mixer.png" width="30" height="30" alt=""></picture>
+    <div class="chat-id"><div class="chat-name">MixPilot</div><div class="chat-status" id="status" aria-live="polite"></div></div>
+    <button class="ibtn" id="collapse" title="Hide chat" aria-label="Hide chat"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 4 4 4-4"/></svg></button>
+  </header>
+  <div class="stream" id="stream"></div>
+  <div class="sugg" id="sugg"></div>
+  <form class="composer" id="composer" autocomplete="off">
+    <button type="button" class="ibtn" id="attach" title="Add files" aria-label="Add files"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg></button>
+    <input id="msg" type="text" aria-label="Message MixPilot">
+    <button class="send" id="send" aria-label="Send"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 12V2M2.8 6.2 7 2l4.2 4.2"/></svg></button>
+  </form>
+</section>
+<button class="pillbar" id="pill" aria-label="Show chat"><picture class="mixer"><source srcset="concrete-mixer-static.png" media="(prefers-reduced-motion: reduce)"><img src="concrete-mixer.png" width="30" height="30" alt=""></picture><span class="tx" id="pillText"></span><span class="ex" id="pillEx"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m4 10 4-4 4 4"/></svg></span></button>
+<input type="file" id="picker" accept=".xlsx,.xls,.csv" multiple hidden>
+<div id="tip" role="tooltip"></div>
 
 <script>
 const $ = id => document.getElementById(id);
-const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const md = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
 const fmt = n => Math.round(n).toLocaleString('en-US');
 const pct = x => Math.round(x * 100) + '%';
-const day = iso => new Date(iso + 'T12:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-
+const day = (iso, opts = { month: 'short', day: 'numeric', year: 'numeric' }) => new Date(iso + 'T12:00').toLocaleDateString('en-US', opts);
 const label = name => name.replace(/ \(.*\)$/, '');
+const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+// Re-rendered elements restart their CSS animation; a negative delay keeps it on the clock.
+const sync = ms => `animation-delay:${-(performance.now() % ms)}ms`;
+const dots = () => { const d = -(performance.now() % 1000); return `<span class="dots"><i style="animation-delay:${d}ms"></i><i style="animation-delay:${d + 150}ms"></i><i style="animation-delay:${d + 300}ms"></i></span>`; };
+
+const I = {
+  check: s => `<svg width="${s}" height="${s}" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m3 7.4 2.7 2.7L11 4.6"/></svg>`,
+  chev: `<svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 4 4 4-4"/></svg>`,
+  arrow: `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 7h9M8 3.5 11.5 7 8 10.5"/></svg>`,
+  up: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15V5M5.5 9.5 10 5l4.5 4.5"/></svg>`,
+};
+
+// ------------------------------------------------------------------ phases
+const PH = [
+  { k: 'upload', n: 1, name: 'Upload', rest: 'your files', who: 'You', tag: 'Bring the files your plant already keeps.' },
+  { k: 'prepare', n: 2, name: 'Prepare', rest: 'your data', who: 'Muse Spark and our code', tag: 'Reading, mapping, cleaning, and testing every column.' },
+  { k: 'review', n: 3, name: 'Review', rest: 'what goes in', who: 'You and Muse Spark', tag: 'What the data can support, and what needs your call.' },
+  { k: 'train', n: 4, name: 'Train', rest: 'on your plant', who: 'Our code, no LLM', tag: 'Every setup is tested on mixes it never saw.' },
+  { k: 'results', n: 5, name: 'Results', rest: 'for your model', who: 'Your model, explained by Muse Spark', tag: 'What the model gives you, and what to test next.' },
+];
+const ORDER = PH.map(p => p.k);
+const byK = k => PH.find(p => p.k === k);
+const META_INPUTS = ['Cement', 'Fly ash', 'Slag', 'Water', 'HRWR', 'Fine aggregate', 'Coarse aggregate', 'Material source', 'Curing temperature', 'Age'];
+const PREP_TOOLS = ['read_files', 'map_columns', 'validate_data', 'suggest_inputs'];
 
 // ------------------------------------------------------------------ state
-let sid = null, es = null, lastSeq = -1, block = null, busy = false, sessionModel = null;
-const art = {};               // artifact name -> latest data
-const chips = {};             // artifact name -> chip element in chat
-let cur = null;
+let sid = null, es = null, lastSeq = -1, block = null, sessionModel = null;
+let chatOpen = true, liveEvent = false, models = [];
+const fresh = () => ({
+  live: 'upload', view: 'upload', seen: { upload: true }, pending: [], files: [], uploading: false, busy: null, canTrain: false,
+  art: {}, cards: [], decisions: {}, editing: {}, prep: { step: -1, open: -1, note: '', stopped: false }, train: { note: '', failed: false },
+  sel: 0, leftOpen: false, asked: new Set(), unread: false, lastMsg: '', status: '',
+});
+let S = fresh();
 
-// ------------------------------------------------------------------ chat rendering
+const offered = () => S.cards.filter(c => c.kind === 'input_incomplete');
+const undecided = () => offered().filter(c => !S.decisions[c.input]);
+const trained = () => S.art.training?.status === 'done';
+
+// ------------------------------------------------------------------ timeline
+function phaseState(k) {
+  const i = ORDER.indexOf(k), li = ORDER.indexOf(S.live);
+  if (i > li) return 'locked';
+  if (i < li) return 'done';
+  if (k === 'upload') return 'active';
+  if (k === 'prepare') return S.prep.stopped ? 'waiting' : 'running';
+  if (k === 'review') return undecided().length ? 'waiting' : 'ready';
+  if (k === 'train') return trained() ? 'done' : S.train.failed ? 'waiting' : 'running';
+  return 'done';
+}
+function phaseSub(k, st) {
+  const T = S.art.training, D = S.art.data;
+  if (k === 'upload') { const n = S.files.length || S.pending.length; return n ? `${n} file${n > 1 ? 's' : ''}` : 'Excel or CSV'; }
+  if (k === 'prepare') {
+    if (st === 'locked') return 'Clean and test';
+    if (st === 'waiting') return 'Stopped, see chat';
+    if (st === 'running') return S.prep.step >= 0 ? STEPS[Math.min(S.prep.step, 3)].short : 'Starting';
+    return D ? `${D.mixes} mixes · ${D.batches} batches` : 'Done';
+  }
+  if (k === 'review') {
+    if (st === 'locked') return 'Your decisions';
+    const n = undecided().length;
+    if (st === 'waiting') return `${n} decision${n > 1 ? 's' : ''} for you`;
+    const added = D ? D.coverage.filter(r => r.status === 'new').length : 0;
+    return added ? `${added} new input${added > 1 ? 's' : ''}` : "Meta's 10 inputs";
+  }
+  if (k === 'train') {
+    if (st === 'locked') return 'Compare setups';
+    if (st === 'waiting') return 'Stopped, see chat';
+    if (st === 'running') return !T ? 'Starting' : T.done >= T.total ? 'Saving the model' : `Round ${T.done + 1} of ${T.total}`;
+    return T?.gain > 0 ? `${pct(T.gain)} more accurate` : 'Compared setups';
+  }
+  if (st === 'locked' || !S.art.results) return 'Mixes to test next';
+  const best = bestSaving();
+  return best ? `Up to ${pct(best)} less CO₂` : `Model ${esc(S.art.results.model)}`;
+}
+function glyph(k, st, n) {
+  const R = 11.5, C = 2 * Math.PI * R;
+  const num = (c, w = 500) => `<text x="13" y="17" text-anchor="middle" font-size="11.5" font-weight="${w}" font-family="var(--mono)" fill="${c}">${n}</text>`;
+  if (st === 'done') return `<svg width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="12" fill="var(--ink)"/><path d="m8.2 13.3 3.3 3.3 6.3-6.6" fill="none" stroke="var(--on-ink)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  if (st === 'running') {
+    const T = S.art.training, p = k === 'prepare' ? (S.prep.step + 1) / 4 : T ? (T.done + 1) / (T.total + 1) : 0;
+    return `<svg width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="${R}" fill="var(--bg)" stroke="var(--line-2)" stroke-width="1.5"/><circle cx="13" cy="13" r="${R}" fill="none" stroke="var(--ink)" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - Math.max(.04, p))}" transform="rotate(-90 13 13)"/>${num('var(--ink)')}</svg>`;
+  }
+  if (st === 'waiting') return `<svg width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="12" fill="var(--you)"/>${num('var(--on-you)', 600)}</svg>`;
+  if (st === 'ready' || st === 'active') return `<svg width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="${R}" fill="var(--bg)" stroke="var(--ink)" stroke-width="1.5"/>${num('var(--ink)')}</svg>`;
+  return `<svg width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="${R}" fill="var(--bg)" stroke="var(--line-2)" stroke-width="1"/>${num('var(--ink-3)')}</svg>`;
+}
+function renderTimeline() {
+  $('phaseList').innerHTML = PH.map(p => {
+    const st = phaseState(p.k), locked = st === 'locked';
+    return `<button class="ph ${st}" data-go="${p.k}" ${locked ? 'aria-disabled="true" tabindex="-1"' : ''} ${S.view === p.k ? 'aria-current="page"' : ''} title="${locked ? 'Unlocks when the phase before it is done' : p.name}"><span class="g">${glyph(p.k, st, p.n)}</span><span class="ph-t"><span class="nm">${p.name}</span><span class="sb">${phaseSub(p.k, st)}</span></span></button>${p.n < PH.length ? `<i class="ln ${st === 'done' ? 'done' : ''}"></i>` : ''}`;
+  }).join('');
+  const cur = document.querySelector('.ph[aria-current]');
+  $('sel').hidden = !cur;
+  if (cur) { $('sel').style.width = cur.offsetWidth + 'px'; $('sel').style.transform = `translateX(${cur.offsetLeft}px)`; }
+  $('navModels').classList.toggle('on', S.view === 'models');
+}
+
+// ------------------------------------------------------------------ views
+function head(p, lede, rest = p.rest) {
+  return `<header class="hd"><div class="kick"><span class="n">Phase ${p.n} of 5</span><i></i><span>${p.who}</span></div><h1>${p.name} <span>${esc(rest)}</span></h1><p class="lede">${lede}</p></header>`;
+}
+const blank = text => `<div class="card empty">${text}</div>`;
+const size = n => n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
+const ext = name => esc(name.split('.').pop().toUpperCase());
+
+const VIEWS = {
+  upload() {
+    const started = S.live !== 'upload', P = S.art.prep;
+    if (sessionModel && !started && !S.pending.length) return `${head(byK('upload'), `This chat works with model ${esc(sessionModel)}. Ask about one of your mixes, or add files to start a new project.`)}<button class="drop compact" id="drop" data-act="pick"><span class="ic">${I.up}</span><b>Add files</b></button>`;
+    const has = S.pending.length > 0;
+    const rows = started
+      ? (P?.files || S.files.map(file => ({ file }))).map(f => `<div class="frow"><span class="x">${ext(f.file)}</span><span><b>${esc(f.file)}</b>${f.sheet ? `<small>${esc(f.sheet)} sheet · ${fmt(f.rows)} rows · ${f.columns} columns</small>` : ''}</span></div>`)
+      : S.pending.map((f, i) => `<div class="frow"><span class="x">${ext(f.name)}</span><span><b>${esc(f.name)}</b></span><span class="r">${size(f.size)}</span><button class="link" style="margin-left:14px;font-weight:400;font-size:12.5px" data-remove="${i}">Remove</button></div>`);
+    return `${head(byK('upload'), started ? 'These are the files this project was built from.' : 'Mix designs, cylinder breaks and QC logs, in whatever layout your plant uses. MixPilot works out the rest.')}
+    ${started ? '' : `<button class="drop ${has ? 'compact' : ''}" id="drop" data-act="pick"><span class="ic">${I.up}</span><b>${has ? 'Add more files' : 'Drop Excel or CSV files here'}</b>${has ? '' : '<span>or click to choose. One workbook or several files, US or metric units.</span>'}</button>`}
+    ${rows.length ? `<div class="card files">${rows.join('')}</div>` : ''}
+    ${has && !started ? `<div class="alt"><button class="btn pri lg" data-act="start" ${S.uploading ? 'disabled' : ''}>${S.uploading ? 'Uploading…' : `Start preparing ${I.arrow}`}</button><span class="muted">About 1.5 minutes</span></div>` : ''}
+    <p class="fine" style="margin-top:28px;max-width:560px">Your files stay on this machine. Muse Spark sees column names, up to 12 sample values per column, and the results our code computes. Full rows aren't sent.</p>`;
+  },
+
+  prepare() {
+    const P = S.prep;
+    const lede = P.stopped ? "MixPilot stopped here. The chat says what's missing, and you can add files there." : S.live === 'prepare' ? 'Muse Spark reads the sheets and writes the mapping. Our code does every conversion and every number.' : 'What happened to your files before anything reached the model. Open a step to check it.';
+    return `${head(byK('prepare'), lede)}<div class="steps">${STEPS.map((st, i) => {
+      const done = i < P.step, now = i === P.step, off = i > P.step || P.step < 0, open = P.open === i && !off, spin = now && !P.stopped;
+      const g = done ? `<svg class="step-g" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="var(--ink)"/><path d="m7.6 12.2 3 3 5.8-6.1" fill="none" stroke="var(--on-ink)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+        : spin ? `<svg class="step-g" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.5" fill="none" stroke="var(--line-2)" stroke-width="1.5"/><path class="turn" style="${sync(900)}" d="M12 1.5a10.5 10.5 0 0 1 10.5 10.5" fill="none" stroke="var(--ink)" stroke-width="1.5" stroke-linecap="round"/></svg>`
+        : now ? `<svg class="step-g" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="var(--you)"/></svg>`
+        : `<svg class="step-g" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.5" fill="none" stroke="var(--line-2)"/></svg>`;
+      return `<section class="step ${open ? 'open' : ''}"><button class="step-h" data-step="${i}" ${off ? 'disabled' : ''} aria-expanded="${open}">${g}<span><span class="tt">${st.t}</span><span class="own">${st.who}</span></span><span class="sum">${done ? st.sum() : ''}</span>${off ? '' : I.chev}</button>${open ? `<div class="step-b">${spin && P.note ? `<div class="now">${dots()}${esc(P.note)}</div>` : ''}${st.body()}</div>` : ''}</section>`;
+    }).join('')}</div>`;
+  },
+
+  review() {
+    const d = S.art.data;
+    if (!d) return `${head(byK('review'), 'Nothing to review in this chat.')}`;
+    const open = undecided().length, tested = d.tested || [];
+    const unused = tested.filter(t => t.status === 'not used');
+    const shown = tested.filter(t => t.status === 'added' || (t.status === 'partly logged' && S.decisions[t.column] !== 'skip'));
+    return `${head(byK('review'), open ? `Every number here was measured on your data. ${open > 1 ? `${open} things need` : 'One thing needs'} your decision before training.` : "Every number here was measured on your data. Train when you're happy with what goes in.")}
+    <div class="stats">${[[d.mixes, 'mix designs'], [d.batches, 'batches'], [fmt(d.cylinders_used), `cylinders used, of ${fmt(d.cylinders_read)}`], [d.ages.join(' · '), 'test ages, days']].map(([a, b]) => `<div class="stat"><b>${a}</b><span>${b}</span></div>`).join('')}</div>
+    ${offered().map(decisionStage).join('')}
+    <section class="sec"><div class="sec-h"><h2>What the model will see</h2></div>
+      <div class="inputs">${META_INPUTS.map(x => `<span class="chip">${x}</span>`).join('')}</div>
+      ${shown.length ? `<div class="plus">New from your files</div>
+      <div class="rows">${shown.map(t => `<div class="rw test"><span class="raw" style="font-weight:500">${esc(label(t.column))}</span><span class="tag ${t.status === 'added' ? 'add' : 'you'}">${t.status === 'added' ? 'Added' : 'Your call'}</span><span class="why">${esc(t.why)}</span></div>`).join('')}</div>` : ''}
+    </section>
+    ${d.output ? `<section class="sec"><div class="sec-h"><h2>Your strength data</h2><p class="muted">One line per mix design, from ${esc(d.output.source.file)}</p></div>
+      <div class="legend" style="margin-bottom:10px"><span><i class="ln-k" style="background:var(--mark-2)"></i>Each mix design</span><span><i class="ln-k" style="background:var(--ink)"></i>Median of your mixes</span></div>
+      <div class="chart">${curves(d)}</div>
+    </section>` : ''}
+    ${unused.length ? `<details class="disc" id="leftOut" ${S.leftOpen ? 'open' : ''}><summary>${I.chev.replace('class="chev"', '')}Columns left out, and why (${unused.length})</summary>
+      <div class="rows" style="margin-top:6px">${unused.map(t => `<div class="rw test"><span class="raw">${esc(label(t.column))}</span><span class="tag no">Not used</span><span class="why">${esc(t.why)}</span></div>`).join('')}</div></details>` : ''}
+    ${S.live === 'review' && S.canTrain && !S.busy ? `<div class="cta"><div class="t"><b>${open ? 'Ready when you are' : 'Ready to train'}</b>${open ? `${esc(undecided().map(c => label(c.input)).join(' and '))} stay${open > 1 ? '' : 's'} out unless you add ${open > 1 ? 'them' : 'it'}.` : 'Takes 3 to 8 minutes. You can keep browsing while it runs.'}</div><button class="btn pri lg" data-act="train">Train model ${I.arrow}</button></div>` : ''}`;
+  },
+
+  train() {
+    const T = S.art.training;
+    if (!T) return `${head(byK('train'), 'Starting…')}`;
+    const done = T.status === 'done', n = T.total, cur = Math.min(T.done ?? n, n);
+    const group = cur < 1 ? 'a' : cur < 4 ? 'b' : cur < n - 1 ? 'c' : 'd';
+    const shown = done ? T.best_rmse_28d : T.best_so_far?.rmse_28d;
+    const note = S.train.note || (cur < 1 ? "Scoring Meta's settings" : cur < 4 ? 'Trying settings spread across the search space' : cur < n - 1 ? 'BoTorch is picking the next settings to try' : 'Re-checking the best setups on new fold splits');
+    const search = T.search || [];
+    const both = search.some(r => r.plus != null);
+    const lede = S.train.failed ? 'Training stopped before it finished. The chat says why, and you can try again.' : done ? `Each setup learned from part of your ${T.model.mixes} mixes and was tested on the rest, so every score comes from mixes that setup never saw.` : 'Every try learns from part of your mixes and is tested on the rest. This step is all code, so no LLM touches these numbers.';
+    return `${head(byK('train'), lede)}
+    ${S.train.failed ? `<div class="alt" style="margin-top:0;margin-bottom:28px"><button class="btn pri" data-act="train">Try again</button></div>` : ''}
+    <div class="hero-n"><div><div class="big">${shown ? `±${fmt(shown)}<small>psi</small>` : '<span class="muted">–</span>'}</div><div class="big-l">${done ? `28-day prediction error of the saved model${T.typical_28d_psi ? `, about ${pct(T.best_rmse_28d / T.typical_28d_psi)} of a typical ${fmt(T.typical_28d_psi)} psi mix` : ''}` : 'Best 28-day prediction error so far'}</div></div>
+    ${done && T.gain > 0 ? `<div><div class="big">${pct(T.gain)}</div><div class="big-l">more accurate than Meta's default setup, retrained on your data</div></div>` : ''}</div>
+    ${done || S.train.failed ? '' : `<div class="rounds"><div class="pills" role="progressbar" aria-valuemin="0" aria-valuemax="${n}" aria-valuenow="${cur}" aria-label="Training rounds">${Array.from({ length: n }, (_, i) => `<i class="${i < cur ? 'on' : i === cur ? 'cur' : ''}" ${i === cur ? `style="${sync(1100)}"` : ''}></i>`).join('')}</div>
+      <div class="pill-k"><span class="${group === 'a' ? 'act' : ''}" style="left:0">Meta's</span><span class="${group === 'b' ? 'act' : ''}" style="left:${100 / (n - 1)}%">Exploring</span><span class="${group === 'c' ? 'act' : ''}" style="left:${400 / (n - 1)}%">Searching where it looks promising</span><span class="${group === 'd' ? 'act' : ''}" style="right:0">Re-check</span></div>
+      <div class="now-line">${dots()}${esc(note)}</div></div>`}
+    ${search.length ? `<section class="sec"><div class="sec-h"><h2>${done ? 'What the search found' : 'The search so far'}</h2><p class="muted">${done ? 'Search scores, in psi. The re-check below decides' : "28-day error of each round's try, in psi"}</p></div>
+      ${both ? `<div class="legend" style="margin-bottom:10px"><span><i class="ink"></i>With your new inputs</span><span><i></i>Meta's 10 inputs only</span></div>` : ''}
+      <div class="chart">${searchChart(search, n)}</div></section>` : ''}
+    ${done ? `<section class="sec"><div class="sec-h"><h2>The ${T.rows.length} setups, re-checked</h2><p class="muted">On fold splits the search never used</p></div>
+      <div class="card board">${boardRows(T)}</div>
+      <p class="fine" style="margin-top:12px;max-width:640px">${T.tuning_helped ? 'Re-tuning improved the final model, so it keeps the tuned settings.' : "Re-tuning didn't improve the final model, so it keeps Meta's settings."}${T.left_out?.length ? ` Training tested ${esc(T.left_out.map(label).join(', '))} and left ${T.left_out.length > 1 ? "them out, because they didn't help" : "it out, because it didn't help"}.` : ''} Saved as model ${esc(T.model.version)}.${T.reused ? ' These numbers come from an earlier identical run on the same data.' : ''} psi is pounds per square inch, the US unit of concrete strength.</p></section>` : ''}`;
+  },
+
+  results() {
+    const r = S.art.results, T = S.art.training;
+    if (!r) return `${head(byK('results'), 'Results appear here when training finishes.')}`;
+    const p = r.proposals[S.sel] || r.proposals[0], best = bestSaving();
+    const stats = [
+      T?.gain > 0 ? [pct(T.gain), "more accurate 28-day predictions than Meta's default setup, retrained on your data"] : null,
+      best ? [pct(best), 'less CO₂ at the same predicted 28-day strength, in the best mix'] : null,
+      T ? [`±${fmt(T.best_rmse_28d)} psi`, `28-day prediction error${T.typical_28d_psi ? `, about ${pct(T.best_rmse_28d / T.typical_28d_psi)} of a typical ${fmt(T.typical_28d_psi)} psi mix` : ''}`] : null,
+    ].filter(Boolean);
+    return `${head(byK('results'), p ? 'Model trained on your plant, with mixes to take to the lab next.' : 'The model found no lower-CO₂ mix it is confident about yet.', `for model ${r.model}`)}
+    <div class="chart bleed">${scatter(r, p)}</div>
+    <div class="legend" style="margin-top:6px"><span><i></i>Your ${r.compared_with} mixes</span>${p ? `<span><i class="pr"></i>Proposed</span><span><i class="ink"></i>Mix it replaces</span>` : ''}</div>
+    ${stats.length ? `<div class="pay">${stats.map(([a, b]) => `<div class="stat"><b>${a}</b><span>${b}</span></div>`).join('')}</div>` : ''}
+    ${p ? `<section class="sec"><div class="sec-h"><h2>Mixes to test next</h2></div>
+      <div class="seg">${r.proposals.map((q, i) => `<button class="${q === p ? 'on' : ''}" data-sel="${i}" aria-pressed="${q === p}"><b><i></i>${esc(q.id)}<em>−${pct(q.co2_saving)} CO₂</em></b><small>Replaces ${esc(q.replaces)}</small></button>`).join('')}</div>
+    </section>
+    <div class="card" style="margin-top:14px;overflow:auto">${compare(r, p)}</div>
+    <div class="ask"><p class="fine">Quantities in ${r.unit === 'lb/yd3' ? 'lb/yd³' : 'kg/m³'}. ± is the model's 90% uncertainty. Predictions are for lab-cured cylinders. These are mixes to test, not to pour, and your QC engineer signs off.</p>
+      <button class="btn sec-b sm" data-ask="${esc(p.id)}">Ask about ${esc(p.id)}</button></div>` : ''}`;
+  },
+
+  models() {
+    return `<header class="hd"><h1>Models <span>you've trained</span></h1><p class="lede">Saved versions for this plant. Pick one to keep asking about it in chat.</p></header>
+    ${models.length ? `<div class="card models"><div class="mrow mh"><span>Version</span><span>Inputs</span><span style="text-align:right">Mixes</span><span style="text-align:right">28-day error</span><span></span></div>
+      ${models.slice().reverse().map(m => `<div class="mrow"><span><b style="font-weight:550">${esc(m.version)}</b><small style="display:block;color:var(--ink-3);font-size:12.5px">${new Date(m.trained).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</small></span><span>Meta's 10 inputs${m.extra_inputs.map(e => ' + ' + esc(label(e).toLowerCase())).join('')}</span><span style="text-align:right">${m.mixes}</span><span style="text-align:right;font-weight:500">${fmt(m.rmse_28d)} psi</span><button class="btn sec-b sm" data-use="${esc(m.version)}">Use in chat</button></div>`).join('')}</div>`
+      : blank('No models yet. Your first one appears here when training finishes.')}`;
+  },
+};
+
+// ------------------------------------------------------------------ prepare steps
+const STEPS = [
+  { t: 'Read the files', short: 'Reading the files', who: 'Muse Spark',
+    sum: () => { const f = S.art.prep?.files || []; return `${f.length} sheet${f.length === 1 ? '' : 's'} · ${fmt(f.reduce((a, x) => a + x.rows, 0))} rows`; },
+    body: () => { const P = S.art.prep; if (!P?.files) return ''; return `<div class="rows">${P.files.map(f => `<div class="rw file"><span class="raw">${esc(f.file)}</span><span class="muted" style="font-size:12.5px">${f.header_row > 1 ? `Headers found on row ${f.header_row}` : 'Headers on row 1'} · ${fmt(f.rows)} rows</span></div>`).join('')}</div>
+      ${P.joins?.length ? `<p class="sub-cap" style="margin:14px 0 6px">How the files link up</p><div class="rows">${P.joins.map(j => `<div class="rw file"><span class="raw">${esc(j.a.replace(':', ' · '))} = ${esc(j.b.replace(':', ' · '))}</span><span class="muted" style="font-size:12.5px">${j.shared} shared values</span></div>`).join('')}</div>` : ''}`; } },
+  { t: 'Map the columns', short: 'Mapping columns', who: 'Muse Spark writes the mapping, our code applies it',
+    sum: () => { const m = S.art.prep?.mapped || []; const c = new Set(m.map(r => r.change).filter(Boolean)).size; return `${m.length} columns · ${c} unit conversion${c === 1 ? '' : 's'}`; },
+    body: () => { const P = S.art.prep; if (!P?.mapped) return ''; return `<div class="rows">${P.mapped.map(r => `<div class="rw map"><span class="raw">${esc(r.column)}</span><span class="arr">${I.arrow}</span><span>${esc(r.field)}</span><span class="muted" style="font-size:12.5px">${esc(r.change || '')}</span></div>`).join('')}</div>
+      ${P.assumptions?.length ? `<p class="fine" style="margin-top:12px">Assumed: ${esc(P.assumptions.join('; '))}.</p>` : ''}`; } },
+  { t: 'Clean and check', short: 'Cleaning the data', who: 'Muse Spark judges the notes, our code does the rest',
+    sum: () => { const P = S.art.prep; return P?.cylinders_read ? `${fmt(P.cylinders_used)} of ${fmt(P.cylinders_read)} cylinders kept` : ''; },
+    body: () => { const P = S.art.prep; if (!P?.cylinders_read) return ''; const issues = (P.issues || []).filter(i => !/^(left out|assumption:)/.test(i.message));
+      return `<div class="fall"><div class="rows"><div class="rw"><span>Cylinders read</span><span>${fmt(P.cylinders_read)}</span></div>
+        ${Object.entries(P.dropped || {}).map(([why, n]) => `<div class="rw"><span>${esc(droppedWhy(why))}</span><span>−${n}</span></div>`).join('')}
+        <div class="rw tot"><span>Used for training</span><span>${fmt(P.cylinders_used)}</span></div></div>
+      <div><ul class="notes">${issues.map(i => `<li class="${i.level === 'warning' ? 'warn' : ''}">${esc(i.message)}</li>`).join('')}</ul></div></div>`; } },
+  { t: 'Test every other column', short: 'Testing the columns', who: 'Our code, on your data',
+    sum: () => { const t = S.art.data?.tested || [], n = s => t.filter(x => x.status === s).length; return [n('added') ? `${n('added')} added` : '', n('partly logged') ? `${n('partly logged')} your call` : '', n('not used') ? `${n('not used')} not used` : ''].filter(Boolean).join(' · '); },
+    body: () => {
+      const tested = S.prep.tested ? S.art.data?.tested : null;
+      if (!tested) return `<div class="rows">${(S.art.prep?.candidates || []).map(c => `<div class="rw test pending"><span class="raw">${esc(label(c))}</span>${dots()}<span></span></div>`).join('')}</div>`;
+      return `<div class="rows">${tested.map(t => {
+        const k = t.status === 'added' ? ['add', 'Added'] : t.status === 'partly logged' ? ['you', 'Your call'] : ['no', 'Not used'];
+        return `<div class="rw test"><span class="raw" style="font-weight:${t.status === 'not used' ? 400 : 500}">${esc(label(t.column))}</span><span class="tag ${k[0]}">${k[1]}</span><span class="why">${esc(t.why)}</span></div>`;
+      }).join('')}</div>`;
+    } },
+];
+// "Tech Notes contains 'cap failure'" reads better as what happened to the cylinder
+function droppedWhy(why) {
+  const m = why.match(/^(.+) contains '(.+)'$/);
+  if (m) return `${m[2][0].toUpperCase()}${m[2].slice(1)}, from ${m[1]}`;
+  if (why === 'older than 28 days') return 'Tested after 28 days';
+  return why[0].toUpperCase() + why.slice(1);
+}
+
+// ------------------------------------------------------------------ the plant's decisions (stage and chat stay in sync)
+const verdict = c => S.decisions[c.input] === 'use' ? ['add', 'In the model'] : ['no', 'Left out'];
+function decisionStage(c) {
+  const name = esc(label(c.input));
+  if (S.decisions[c.input] && !S.editing[c.input]) {
+    const [k, t] = verdict(c), use = S.decisions[c.input] === 'use';
+    return `<div class="decide settled"><div class="decide-row"><span class="tag ${k}">${t}</span><span><b>${name}.</b> ${use ? "Batches without a value get your plant's median." : 'The model trains without it.'}</span>${S.live === 'review' ? `<button class="link" style="margin-left:auto" data-edit="${esc(c.input)}">Change</button>` : ''}</div></div>`;
+  }
+  const missing = c.mixes - c.mixes_with_value, since = c.recorded_from ? day(c.recorded_from) : null, tl = c.timeline;
+  const first = tl ? tl.findIndex(b => b.has) : -1;
+  return `<div class="decide"><div class="decide-top"><span class="tag you">Your call</span></div>
+    <h2>Use ${name} in training?</h2>
+    <p>${esc(c.why)} ${since ? `Your plant only started logging it on ${since}.` : `Only ${c.mixes_with_value} of ${c.mixes} batches have it.`}</p>
+    ${tl ? `<div class="strip" role="img" aria-label="${c.mixes_with_value} of ${c.mixes} batches have ${name}">${tl.map(b => `<i class="${b.has ? 'has' : ''}" data-tip="${day(b.date)}\n${b.has ? 'Logged' : 'Not logged'}"></i>`).join('')}</div>
+    <div class="strip-k"><span>${day(tl[0].date, { month: 'short', day: 'numeric' })}</span>${since && first > 0 ? `<em style="left:${first / tl.length * 100}%">Logged since ${since}</em>` : ''}<span>${day(tl[tl.length - 1].date, { month: 'short', day: 'numeric' })}</span></div>`
+      : `<div class="strip"><i class="has" style="flex:${c.mixes_with_value}"></i><i style="flex:${missing}"></i></div>`}
+    <div class="decide-ft"><button class="btn pri" data-decide="use" data-input="${esc(c.input)}">Use it in training</button><button class="btn sec-b" data-decide="skip" data-input="${esc(c.input)}">Leave it out</button><span class="mt">${c.mixes_with_value} of ${c.mixes} batches have it.<br>The other ${missing} would get your plant's median.</span></div>
+  </div>`;
+}
+function renderChatCards() {
+  document.querySelectorAll('.c-ask').forEach(el => {
+    const c = S.cards.find(x => x.input === el.dataset.input);
+    if (!c) return el.remove();
+    const name = esc(label(c.input));
+    if (!S.decisions[c.input] || S.editing[c.input]) {
+      el.className = 'c-ask';
+      el.innerHTML = `<div class="h">${name}: ${c.mixes_with_value} of ${c.mixes} batches</div><div class="d">${c.recorded_from ? `Logged since ${day(c.recorded_from)}. ` : ''}${esc(c.why)}</div><div class="b"><button class="btn pri sm" data-decide="use" data-input="${esc(c.input)}">Use it in training</button><button class="btn sec-b sm" data-decide="skip" data-input="${esc(c.input)}">Leave it out</button></div>`;
+    } else {
+      const [k, t] = verdict(c);
+      el.className = 'c-ask ok';
+      el.innerHTML = `<span>${name}</span><span class="tag ${k}">${t}</span>`;
+    }
+  });
+}
+
+// ------------------------------------------------------------------ charts
+const content = () => {
+  const st = $('stage'), css = getComputedStyle(document.documentElement);
+  const over = document.body.dataset.layer === 'over' || !chatOpen;
+  const chatw = parseFloat(css.getPropertyValue('--chatw')), padL = over ? 56 : chatw + 12 + 56, padR = 56;
+  const avail = st.clientWidth - padL - padR, w = Math.min(880, avail);
+  return { w, left: padL + (avail - w) / 2 };
+};
+function curves(d) {
+  const c = d.output.curves, ages = d.ages, W = content().w, H = 280, m = { l: 44, r: 58, t: 10, b: 34 };
+  const ys = c.flatMap(x => x.points.map(p => p[1])), y0 = Math.floor(Math.min(...ys) / 1000) * 1000, y1 = Math.ceil(Math.max(...ys) / 1000) * 1000;
+  const lx = a => Math.log(a + 1), a0 = lx(ages[0]), a1 = lx(ages[ages.length - 1]);
+  const X = a => m.l + (lx(a) - a0) / (a1 - a0 || 1) * (W - m.l - m.r), Y = v => H - m.b - (v - y0) / (y1 - y0 || 1) * (H - m.t - m.b);
+  let g = `<svg width="${W}" height="${H}" role="img" aria-label="Strength by age for each mix design">`;
+  for (let t = y0; t <= y1; t += 2000) g += `<line class="gl" x1="${m.l}" x2="${W - m.r + 40}" y1="${Y(t)}" y2="${Y(t)}"/><text class="ax" x="${m.l - 8}" y="${Y(t) + 4}" text-anchor="end">${t / 1000}K</text>`;
+  ages.forEach(a => g += `<text class="ax" x="${X(a)}" y="${H - m.b + 18}" text-anchor="middle">${a} days</text>`);
+  c.forEach(x => {
+    const pts = x.points.map(p => `${X(p[0])},${Y(p[1])}`).join(' ');
+    g += `<polyline points="${pts}" fill="none" stroke="var(--mark-2)" stroke-width="1.25"/><polyline points="${pts}" fill="none" stroke="transparent" stroke-width="10" data-tip="${esc(x.mix)}\n${x.points.map(p => `${p[0]} days: ${fmt(p[1])} psi`).join('\n')}"/>`;
+  });
+  const med = ages.map(a => { const v = c.map(x => x.points.find(p => p[0] === a)?.[1]).filter(x => x != null).sort((p, q) => p - q); return v.length ? [a, v[Math.floor(v.length / 2)]] : null; }).filter(Boolean);
+  g += `<polyline points="${med.map(p => `${X(p[0])},${Y(p[1])}`).join(' ')}" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" pointer-events="none"/>`;
+  med.forEach((p, i) => g += `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="4" fill="var(--ink)" stroke="var(--bg)" stroke-width="2"/>${i === med.length - 1 ? `<text class="lbl" x="${X(p[0]) + 9}" y="${Y(p[1]) + 4}">${fmt(p[1])}</text>` : ''}`);
+  return g + '</svg>';
+}
+function searchChart(search, total) {
+  const W = content().w, H = 240, m = { l: 44, r: 58, t: 10, b: 34 };
+  const all = search.flatMap(s => [s.base, s.plus]).filter(x => x != null);
+  if (!all.length) return '';
+  const step = Math.max(...all) - Math.min(...all) > 800 ? 400 : 200;
+  const y1 = Math.ceil(Math.max(...all) / step) * step, y0 = Math.floor(Math.min(...all) / step) * step;
+  const X = r => m.l + (r - 1) / (total - 1) * (W - m.l - m.r), Y = e => H - m.b - (e - y0) / (y1 - y0 || 1) * (H - m.t - m.b);
+  let g = `<svg width="${W}" height="${H}" role="img" aria-label="28-day error of each round's try">`;
+  for (let t = y0; t <= y1; t += step) g += `<line class="gl" x1="${m.l}" x2="${W - m.r + 40}" y1="${Y(t)}" y2="${Y(t)}"/><text class="ax" x="${m.l - 8}" y="${Y(t) + 4}" text-anchor="end">${fmt(t)}</text>`;
+  [1, 4, 8, total - 1].forEach(r => g += `<text class="ax" x="${X(r)}" y="${H - m.b + 18}" text-anchor="middle">Round ${r}</text>`);
+  const series = (key, color) => {
+    let best = Infinity, line = [];
+    const pts = search.filter(s => s[key] != null);
+    pts.forEach(s => { if (s[key] < best) best = s[key]; line.push([s.round, best]); });
+    if (!line.length) return '';
+    const d = line.map(([r, b], i) => (i ? `H${X(r)}V${Y(b)}` : `M${X(r)} ${Y(b)}`)).join('');
+    const e = line[line.length - 1];
+    return `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>${pts.map(s => `<circle cx="${X(s.round)}" cy="${Y(s[key])}" r="4" fill="${color}" stroke="var(--bg)" stroke-width="2"/>`).join('')}<text class="lbl" x="${X(e[0]) + 10}" y="${Y(e[1]) + 4}">${fmt(e[1])}</text>`;
+  };
+  g += series('base', 'var(--mark-2)') + series('plus', 'var(--ink)');
+  const bw = (W - m.l - m.r) / total;
+  search.forEach(s => g += `<rect class="hit" x="${X(s.round) - bw / 2}" y="${m.t}" width="${bw}" height="${H - m.t - m.b}" data-tip="Round ${s.round}: ${esc(s.kind)}${s.plus != null ? `\nWith new inputs: ${fmt(s.plus)} psi` : ''}${s.base != null ? `\nMeta's 10 inputs: ${fmt(s.base)} psi` : ''}"/>`);
+  return g + '</svg>';
+}
+function boardRows(T) {
+  const max = Math.max(...T.rows.map(r => r.rmse_28d));
+  const folds = f => f?.replace('/', ' of ');
+  return T.rows.map(r => {
+    const note = r.baseline ? 'Baseline' : r.chosen ? `Best. Beat the baseline on ${folds(r.folds)} folds` : r.folds_vs_meta ? `Beat Meta's settings on ${folds(r.folds_vs_meta)} folds` : `Beat the baseline on ${folds(r.folds)} folds`;
+    return `<div class="brow ${r.chosen ? 'win' : ''}"><div class="nm">${esc(r.row)}<small>${note}</small></div><div class="v">${fmt(r.rmse_28d)} psi</div><div class="bar"><i style="width:${r.rmse_28d / max * 100}%"></i></div></div>`;
+  }).join('');
+}
+function scatter(r, sel) {
+  const { w, left } = content(), W = w + left, H = Math.max(340, Math.min(500, $('stage').clientHeight - 270)), m = { l: left + 44, r: 20, t: 30, b: 44 };
+  const xs = [...r.existing.map(p => p.gwp), ...r.proposals.map(p => p.gwp)], ys = [...r.existing.map(p => p.psi), ...r.proposals.map(p => p.pred_psi)];
+  const x0 = Math.floor(Math.min(...xs) / 50) * 50, x1 = Math.ceil(Math.max(...xs) / 50) * 50, y0 = Math.floor(Math.min(...ys) / 1000) * 1000, y1 = Math.ceil(Math.max(...ys) / 1000) * 1000;
+  const X = v => m.l + (v - x0) / (x1 - x0 || 1) * (W - m.l - m.r), Y = v => H - m.b - (v - y0) / (y1 - y0 || 1) * (H - m.t - m.b);
+  const hit = sel && r.existing.find(e => e.mix === sel.replaces);
+  let g = `<svg width="${W}" height="${H}" style="margin-left:${-left}px" role="img" aria-label="CO2 against 28-day strength for your mixes and the proposed mixes"><defs><marker id="ah" viewBox="0 0 8 8" refX="6.5" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 7 4 1 7" fill="none" stroke="var(--ink)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>`;
+  for (let t = y0; t <= y1; t += 1000) g += `<line class="gl" x1="0" x2="${W}" y1="${Y(t)}" y2="${Y(t)}"/><text class="ax" x="${m.l - 8}" y="${Y(t) + 4}" text-anchor="end">${t / 1000}K</text>`;
+  for (let t = x0; t <= x1; t += 50) g += `<text class="ax" x="${X(t)}" y="${H - m.b + 18}" text-anchor="middle">${t}</text>`;
+  g += `<text class="ax-t" x="${m.l + (W - m.l - m.r) / 2}" y="${H - 4}" text-anchor="middle">CO₂, kg/m³ (further left is better)</text><text class="ax-t" x="${m.l}" y="12">28-day strength, psi</text>`;
+  r.existing.forEach(p => { if (p !== hit) g += `<circle class="m-ex" cx="${X(p.gwp)}" cy="${Y(p.psi)}" r="4.5"/><circle class="hit" cx="${X(p.gwp)}" cy="${Y(p.psi)}" r="11" data-tip="${esc(p.mix)}\n${fmt(p.psi)} psi · ${Math.round(p.gwp)} kg CO₂/m³"/>`; });
+  if (hit) {
+    const xa = X(hit.gwp), ya = Y(hit.psi), xb = X(sel.gwp), yb = Y(sel.pred_psi), len = Math.hypot(xb - xa, yb - ya) || 1, tr = 11;
+    g += `<line x1="${xa}" y1="${ya}" x2="${xb + (xa - xb) / len * tr}" y2="${yb + (ya - yb) / len * tr}" stroke="var(--ink)" stroke-width="1.25" marker-end="url(#ah)"/>`;
+    g += `<circle class="m-ex sel-m" cx="${xa}" cy="${ya}" r="5.5"/><circle class="hit" cx="${xa}" cy="${ya}" r="11" data-tip="${esc(hit.mix)}\n${fmt(hit.psi)} psi · ${Math.round(hit.gwp)} kg CO₂/m³"/><text class="lbl-2" x="${xa + 10}" y="${ya + 4}">${esc(hit.mix)}</text>`;
+  }
+  r.proposals.forEach((p, i) => g += `<circle class="m-pr" cx="${X(p.gwp)}" cy="${Y(p.pred_psi)}" r="${p === sel ? 7.5 : 6}"/><circle class="hit" style="cursor:pointer" data-sel="${i}" cx="${X(p.gwp)}" cy="${Y(p.pred_psi)}" r="14" data-tip="${esc(p.id)} · replaces ${esc(p.replaces)}\n${fmt(p.pred_psi)} ± ${fmt(p.plus_minus_psi)} psi · ${Math.round(p.gwp)} kg CO₂/m³"/><text class="lbl" x="${X(p.gwp) - 11}" y="${Y(p.pred_psi) + 4}" text-anchor="end" pointer-events="none">${esc(p.id)}</text>`);
+  return g + '</svg>';
+}
+function compare(r, p) {
+  const t = p.today || {};
+  const row = (name, a, b, key) => `<tr class="${key ? 'key' : ''}"><td>${esc(name)}</td><td>${a ?? '–'}</td><td class="pos">${b ?? '–'}</td></tr>`;
+  const num = v => v == null ? '–' : Math.abs(v) >= 100 ? fmt(v) : String(+(+v).toFixed(1));
+  const rows = [
+    row('CO₂ (kg/m³)', t.gwp != null ? fmt(t.gwp) : null, `${fmt(p.gwp)} (−${pct(p.co2_saving)})`, true),
+    row('28-day strength (psi)', fmt(p.target_psi), `${fmt(p.pred_psi)} ± ${fmt(p.plus_minus_psi)}`, true),
+    row('7-day strength (psi)', t.pred_7d_psi != null ? fmt(t.pred_7d_psi) : null, fmt(p.pred_7d_psi)),
+  ];
+  Object.entries(p.composition).forEach(([k, v]) => rows.push(row(k, t.composition?.[k], v)));
+  r.recipe_extras.forEach(e => rows.push(row(label(e), num(t.extras?.[e]), num(p.extras[e]))));
+  r.kept.forEach(e => rows.push(row(`${label(e)} (kept)`, num(t.extras?.[e]), num(p.extras[e]))));
+  return `<table class="cmp"><thead><tr><th scope="col"></th><th scope="col">${esc(p.replaces)} today</th><th scope="col">${esc(p.id)} proposed</th></tr></thead><tbody>${rows.join('')}</tbody></table>`;
+}
+const bestSaving = () => { const r = S.art.results; return r?.proposals.length ? Math.max(...r.proposals.map(p => p.co2_saving)) : 0; };
+
+// ------------------------------------------------------------------ rendering
+let lastHtml = '', queued = false;
+function renderView(mount = false) {
+  const html = VIEWS[S.view]();
+  if (!mount && html === lastHtml) return;
+  lastHtml = html;
+  const top = $('stage').scrollTop;
+  $('view').innerHTML = `<div class="inner ${mount ? 'enter' : ''}">${html}</div>`;
+  $('stage').scrollTop = mount ? 0 : top;
+  bindDrop();
+}
+function renderLive() {
+  const slot = $('liveSlot');
+  if (S.view === S.live || !(S.busy === 'training' || S.live === 'prepare' || !S.seen[S.live])) { slot.innerHTML = ''; return; }
+  const T = S.art.training, you = S.live === 'review' && undecided().length;
+  const txt = S.live === 'prepare' ? `Preparing: ${STEPS[Math.max(S.prep.step, 0)].short.toLowerCase()}` : S.live === 'train' ? (T ? `Training: round ${Math.min(T.done + 1, T.total)} of ${T.total}` : 'Training') : you ? 'Review needs you' : S.live === 'results' ? 'Results are ready' : `${byK(S.live).name} is ready`;
+  if (slot.firstChild?.dataset.live === S.live) { slot.firstChild.querySelector('.tx').textContent = txt; return; }
+  slot.innerHTML = `<button class="live" data-go="${S.live}" data-live="${S.live}"><span class="d ${you ? 'you' : S.live === 'results' ? 'good' : ''}"></span><span class="tx">${txt}</span><span class="go">Go to ${byK(S.live).name}</span></button>`;
+}
+function renderStatus() {
+  let text = S.status;
+  if (!S.busy) {
+    if (S.live === 'upload') text = sessionModel ? `Working with model ${sessionModel}` : S.pending.length ? 'Ready to start' : 'Waiting for your files';
+    else if (S.live === 'prepare') text = 'Stopped, see the message below';
+    else if (S.live === 'review') text = undecided().length ? 'Waiting for your decision' : 'Ready to train';
+    else if (S.live === 'train') text = S.train.failed ? 'Training stopped' : 'Ready';
+    else text = 'Ready for your questions';
+  }
+  $('status').textContent = text;
+  $('pillText').textContent = S.unread && S.lastMsg ? S.lastMsg : text;
+  $('pillEx').classList.toggle('un', S.unread);
+}
+function suggestions() {
+  if (S.busy) return [];
+  let out = [];
+  if (S.live === 'review') out = undecided().map(c => `What is ${label(c.input)}?`);
+  if (S.live === 'results') {
+    const r = S.art.results, p = r?.proposals[S.sel] || r?.proposals[0];
+    if (p) out.push(`What does ${p.replaces} reach at 7 days?`);
+    if (S.art.training && !S.art.training.tuning_helped) out.push("Why didn't re-tuning help?");
+    out.push("How do you know it isn't overfitting?");
+  }
+  return out.filter(q => !S.asked.has(q));
+}
+function renderComposer() {
+  const dis = !!S.busy;
+  $('msg').disabled = dis; $('send').disabled = dis; $('attach').disabled = dis;
+  $('msg').placeholder = S.busy === 'training' ? 'Chat returns when training finishes' : dis ? 'Working…' : S.live === 'upload' ? 'Tell me about your files…' : S.live === 'review' ? 'Ask about the data, or answer here…' : 'Ask about your mixes…';
+  const html = suggestions().map(q => `<button type="button" data-say="${esc(q)}">${esc(q)}</button>`).join('');
+  if ($('sugg').innerHTML !== html) { $('sugg').innerHTML = html; scrollChat(); }  // the stream just got shorter
+}
+function renderAll(mount = false) { renderTimeline(); renderView(mount); renderLive(); renderStatus(); renderComposer(); }
+// Many events can arrive in one frame (a replay, a stream): draw once.
+function touch() { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; renderAll(false); }); }
+
+function go(k) {
+  if (k !== 'models' && phaseState(k) === 'locked') return;
+  if (k === 'models') loadModels();
+  if (S.view === k) return;
+  S.view = k; S.seen[k] = true;
+  renderAll(!reduced());
+}
+function advance(k) {
+  const follow = S.view === S.live;
+  S.live = k; S.seen[k] = false; block = null;
+  chDivider(k);
+  if (!follow) return touch();  // the user is reading another phase: the chip says it moved on
+  S.view = k; S.seen[k] = true;
+  if (liveEvent && !reduced()) chapter(k); else renderAll(liveEvent);
+}
+let chapterRun = 0;
+async function chapter(k) {
+  const me = ++chapterRun, p = byK(k), c = $('chapter');
+  const rest = k === 'results' && S.art.results ? `for model ${S.art.results.model}` : p.rest;
+  c.getAnimations({ subtree: true }).forEach(x => x.cancel());
+  c.innerHTML = `<div class="chapter-in"><div class="n">0${p.n} / 05</div><h1>${p.name} <span>${esc(rest)}</span></h1><p>${p.tag}</p></div>`;
+  c.hidden = false; c.style.top = $('stage').scrollTop + 'px';
+  renderTimeline(); renderLive(); renderStatus(); renderComposer();
+  const a = c.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease-out', fill: 'both' });
+  c.querySelector('.chapter-in').animate([{ opacity: 0, transform: 'translateY(14px)' }, { opacity: 1, transform: 'none' }], { duration: 520, easing: 'cubic-bezier(.23,1,.32,1)', fill: 'both' });
+  await a.finished.catch(() => {});
+  if (me !== chapterRun) return;
+  renderView(false); $('stage').scrollTop = 0; c.style.top = 0;
+  await new Promise(r => setTimeout(r, 1000));
+  if (me !== chapterRun) return;
+  const out = c.animate([{ clipPath: 'inset(0 0 0 0)' }, { clipPath: 'inset(0 0 100% 0)' }], { duration: 520, easing: 'cubic-bezier(.77,0,.175,1)', fill: 'both' });
+  renderView(true);
+  await out.finished.catch(() => {});
+  if (me !== chapterRun) return;
+  c.hidden = true; c.getAnimations({ subtree: true }).forEach(x => x.cancel());
+}
+
+// ------------------------------------------------------------------ chat
 const stream = $('stream');
-function scroll() { stream.scrollTop = stream.scrollHeight; }
-
-function agentBlock(fresh) {
-  if (!block || fresh) {
+const scrollChat = () => { stream.scrollTop = stream.scrollHeight; };
+function addChat(html, cls) {
+  const d = document.createElement('div');
+  if (cls) d.className = cls;
+  d.innerHTML = html; stream.append(d); scrollChat();
+  return d;
+}
+function chDivider(k) {
+  const p = byK(k), b = document.createElement('button');
+  b.className = 'ch'; b.dataset.go = k; b.innerHTML = `<span class="n">0${p.n}</span><b>${p.name}</b>`;
+  stream.append(b); scrollChat();
+}
+function agentBlock() {
+  if (!block) {
     block = document.createElement('div');
     block.className = 'agent';
-    block.innerHTML = '<div class="texts"></div><div class="items"></div><div class="actions"></div><div class="status" hidden></div>';
+    block.innerHTML = '<div class="tools"></div><div class="texts"></div><div class="items"></div>';
     stream.append(block);
   }
   return block;
 }
-function setStatus(text) {
-  const st = agentBlock().querySelector('.status');
-  st.hidden = !text; st.textContent = text || '';
-  scroll();
+function toolStart(text) {
+  agentBlock().querySelector('.tools').insertAdjacentHTML('beforeend', `<div class="t-now"><span class="spin"></span><span>${esc(text)}</span></div>`);
+  scrollChat();
 }
-function addItem(el) { agentBlock().querySelector('.items').append(el); scroll(); }
-
-function chip(name, title, sub) {
-  if (!chips[name] || !chips[name].isConnected) {
-    const b = document.createElement('button');
-    b.className = 'art'; b.dataset.a = name;
-    addItem(b); chips[name] = b;
-  }
-  chips[name].innerHTML = `<span><div class="t">${title}</div><div class="s">${sub}</div></span><span class="go">Open ›</span>`;
-  chips[name].classList.toggle('on', cur === name);
+function toolsFinish() {
+  document.querySelectorAll('.t-now').forEach(n => { n.classList.remove('t-now'); n.querySelector('.spin').outerHTML = I.check(14); });
+}
+function toolsCollapse(text) {
+  const t = block?.querySelector('.tools');
+  if (t) t.innerHTML = `<div>${I.check(14)}<span>${esc(text)}</span></div>`;
+}
+function showChatCards() {
+  offered().forEach(c => {
+    if (document.querySelector(`.c-ask[data-input="${CSS.escape(c.input)}"]`)) return;
+    const el = document.createElement('div');
+    el.className = 'c-ask'; el.dataset.input = c.input;
+    agentBlock().querySelector('.items').append(el);
+  });
+  renderChatCards(); scrollChat();
+}
+function errorLine(text) {
+  const d = document.createElement('div'); d.className = 'err'; d.textContent = text;
+  (block?.querySelector('.items') || stream).append(d);
+  scrollChat();
 }
 
+// ------------------------------------------------------------------ events from the session
+function restartPrep() {
+  S.art = {}; S.cards = []; S.decisions = {}; S.editing = {}; S.canTrain = false; S.sel = 0;
+  S.prep = { step: -1, open: -1, note: '', stopped: false }; S.train = { note: '', failed: false };
+}
 const handlers = {
   message(e) {
-    const d = document.createElement('div'); d.className = 'user';
-    d.innerHTML = (e.text ? `<div class="txt">${md(e.text)}</div>` : '') +
-      (e.files ? `<div class="files">${e.files.map(f => `<span class="file">${esc(f)}</span>`).join('')}</div>` : '');
-    stream.querySelector('.empty')?.remove();
-    stream.append(d); block = null; scroll();
+    if (e.files) {
+      S.files = [...new Set([...S.files, ...e.files])]; S.pending = []; S.uploading = false;  // the session keeps earlier files
+      restartPrep();
+      block = null;
+      addChat(`<div class="ffs">${e.files.map(f => `<span class="ff">${esc(f)}</span>`).join(' · ')}</div>`, 'm-you');
+      S.status = 'Starting';
+      advance('prepare');
+    } else {
+      addChat(md(e.text), 'm-you');
+      block = null;
+      S.asked.add(e.text);
+    }
+    touch();
   },
-  busy(e) { setBusy(true); if (e.kind === 'training') agentBlock(true); setStatus(e.kind === 'training' ? 'Training…' : 'Thinking…'); },
-  idle() { setBusy(false); setStatus(''); },
-  tool(e) { if (e.status === 'running') setStatus(e.label + '…'); },
-  tool_progress(e) { setStatus(e.text + '…'); },
+  busy(e) {
+    S.busy = e.kind; S.status = e.kind === 'training' ? 'Training' : 'Thinking…';
+    if (e.kind === 'training') {
+      S.canTrain = false; S.train = { note: '', failed: false }; delete S.art.results; delete S.art.training;
+      advance('train');
+      toolStart("Training on your plant's data");
+    }
+    touch();
+  },
+  idle() {
+    S.busy = null;
+    if (S.live === 'prepare') { S.prep.stopped = true; toolsFinish(); }
+    if (S.live === 'train' && !trained()) { S.train.failed = true; S.canTrain = true; toolsFinish(); }
+    if (S.live === 'upload') toolsFinish();
+    touch();
+  },
+  tool(e) {
+    const i = PREP_TOOLS.indexOf(e.name);
+    if (e.status === 'running') {
+      S.status = e.label + '…';
+      if (i >= 0) {
+        if (S.live !== 'prepare') { restartPrepKeepFiles(); advance('prepare'); }
+        S.prep.step = i; S.prep.open = i; S.prep.note = ''; S.prep.tested = false; S.prep.stopped = false;
+        if (e.name === 'suggest_inputs') { S.cards = []; S.decisions = {}; S.editing = {}; }
+      }
+      toolStart(e.label);
+    } else {
+      toolsFinish();
+      if (e.name === 'suggest_inputs' && e.status === 'done') {
+        S.prep.step = 4; S.prep.note = ''; S.prep.tested = true;
+        toolsCollapse('Prepared your data in 4 steps');
+        advance('review');
+        showChatCards();
+      }
+    }
+    touch();
+  },
+  tool_progress(e) {
+    S.status = e.text + '…';
+    if (S.live === 'prepare') S.prep.note = e.text;
+    if (S.live === 'train') S.train.note = e.text;
+    touch();
+  },
   message_start(e) {
-    const p = document.createElement('p'); p.id = 'm' + e.seq;
+    const p = document.createElement('p'); p.id = 'm' + e.seq; p.className = 'm-ag';
     agentBlock().querySelector('.texts').append(p);
   },
-  text_delta(e) { const p = $('m' + e.message); if (p) { p.dataset.raw = (p.dataset.raw || '') + e.text; p.innerHTML = md(p.dataset.raw); scroll(); } },
-  message_end(e) { const p = $('m' + e.message); if (p && e.interim) p.remove(); else if (p) p.innerHTML = md(e.text); },
-  card(e) {
-    const d = document.createElement('div');
-    const name = label(e.input);
-    if (e.kind === 'input_ready') {
-      d.className = 'find new';
-      const where = e.mixes_with_value === e.mixes ? `all ${e.mixes} batches` : `${e.mixes_with_value} of ${e.mixes} batches`;
-      d.innerHTML = `<div class="h">${esc(name)}: ready to use</div><div class="d">${esc(e.why)} In ${esc(e.file)} for ${where}. Added as a new model input.</div>`;
-    } else {
-      d.className = 'find miss'; d.dataset.card = e.input;
-      const since = e.recorded_from ? `Logged since ${day(e.recorded_from)}. ` : '';
-      d.innerHTML = `<div class="h">${esc(name)}: only ${e.mixes_with_value} of ${e.mixes} batches</div><div class="d">${since}${esc(e.why)}</div><div class="use"><button class="btn sm" data-input="${esc(e.input)}">Use it in training</button></div>`;
-    }
-    addItem(d);
+  text_delta(e) {
+    const p = $('m' + e.message);
+    if (p) { p.dataset.raw = (p.dataset.raw || '') + e.text; p.innerHTML = md(p.dataset.raw); scrollChat(); }
   },
-  train_button() {
-    $('train')?.remove();
-    const actions = agentBlock().querySelector('.actions');
-    actions.innerHTML = '<button class="btn" id="train">Train model</button>';
-    scroll();
+  message_end(e) {
+    const p = $('m' + e.message);
+    if (!p) return;
+    if (e.interim) return p.remove();
+    p.innerHTML = md(e.text);
+    S.lastMsg = e.text.replace(/\*\*/g, '');
+    if (!chatOpen) { S.unread = true; renderStatus(); }
+    scrollChat();
   },
+  card(e) { S.cards.push(e); touch(); },
+  train_button() { S.canTrain = true; touch(); },
   artifact(e) {
-    art[e.name] = e.data;
-    const d = e.data;
-    if (e.name === 'data') chip('data', 'Data', `${d.mixes} mixes · ${d.batches} batches · model inputs and coverage`);
+    S.art[e.name] = e.data;
     if (e.name === 'training') {
-      chip('training', 'Training', d.status === 'done' ? `${d.total} setups compared${d.gain > 0 ? ` · best −${pct(d.gain)}` : ''}` : `${d.done} of ${d.total} rounds`);
-      if (d.status === 'running') setStatus(`Training: ${d.done} of ${d.total} rounds`);
-      if (!cur || cur === 'data') show('training');
+      const d = e.data;
+      if (d.status === 'running') { S.status = `Training: round ${Math.min(d.done + 1, d.total)} of ${d.total}`; S.train.note = ''; }
+      if (d.status === 'done') { S.train.note = ''; S.status = 'Thinking…'; toolsFinish(); toolsCollapse(`Compared ${d.rows.length} setups, saved model ${d.model.version}`); }
     }
-    if (e.name === 'results') { chip('results', 'Results', 'less CO₂ at the same strength'); show('results'); }
-    if (e.name === 'data' && !cur) show('data');
-    if (cur === e.name) show(cur);
+    if (e.name === 'results' && S.live !== 'results') { S.sel = 0; advance('results'); }
+    touch();
   },
-  input_used(e) {
-    document.querySelectorAll('.find[data-card]').forEach(c => {
-      if (c.dataset.card === e.input) c.querySelector('.use').innerHTML = '<span class="tag new">used in training</span>';
-    });
-  },
-  models_updated(e) { sessionModel = e.model; $('train')?.remove(); loadModels(); },
-  error(e) { const d = document.createElement('div'); d.className = 'err'; d.textContent = e.text; addItem(d); },
+  input_used(e) { S.decisions[e.input] = 'use'; delete S.editing[e.input]; renderChatCards(); touch(); },
+  input_left_out(e) { S.decisions[e.input] = 'skip'; delete S.editing[e.input]; renderChatCards(); touch(); },
+  models_updated(e) { sessionModel = e.model; loadModels(); },
+  error(e) { errorLine(e.text); },
 };
-
-function setBusy(b) {
-  busy = b;
-  $('send').disabled = b; $('attach').disabled = b;
-  $('msg').placeholder = b ? 'Working…' : 'Ask about your mixes…';
-}
-
-// ------------------------------------------------------------------ panels
-const A = {
-  data: { t: 'Data', render: d => {
-    const dropped = Object.entries(d.dropped).map(([k, v]) => `${v} cylinder${v > 1 ? 's' : ''} (${esc(k)})`).join(', ');
-    const o = d.output;
-    return `<h2>Your data</h2>
-    <p class="lead">The model learns to predict your concrete's strength at each test age from the inputs below.</p>
-    <div class="big"><div><div class="n">${d.mixes}</div><div class="l">mix designs</div></div><div><div class="n">${d.batches}</div><div class="l">batches</div></div><div><div class="n">${fmt(d.cylinders_used)}</div><div class="l">cylinders used, of ${fmt(d.cylinders_read)}</div></div><div><div class="n">${d.ages.join(' · ')}</div><div class="l">test ages (days)</div></div></div>
-    ${o ? `<h3>Output: concrete strength</h3>
-    <p class="note">From ${esc(o.source.file)} · ${esc(o.source.column)} at ${esc(o.age.column)}. One line per mix design, the average of its cylinders. psi (pounds per square inch) is the US unit of concrete strength.</p>
-    <div class="card">${strengthChart(o.curves, d.ages)}<div class="legend"><span><i style="background:${css('--ink-3')};opacity:.5"></i>each mix design</span><span><i style="background:${css('--accent')}"></i>median of your mix designs</span></div></div>` : ''}
-    <h3>Inputs</h3>
-    <p class="note">Where each input came from and how many of your ${d.batches} batches have it.</p>
-    <div class="card scroll-x" style="padding:4px 10px"><table>
-      <tr><th>Input</th><th>From</th><th style="width:26%">Coverage</th><th class="num"></th></tr>
-      ${d.coverage.map(r => {
-        const k = r.status === 'new' ? 'new' : r.status === 'incomplete' ? 'miss' : '';
-        const tag = k === 'new' ? ' <span class="tag new">new · added</span>' : k === 'miss' ? ' <span class="tag miss">partly logged</span>' : '';
-        const src = r.source ? `${esc(r.source.file)} · ${esc(r.source.column)}` : 'no column, assumed 0';
-        const partial = r.mixes_with_value < r.mixes;
-        return `<tr class="${k ? 'hl-' + k : ''}"><td>${esc(label(r.input))}${tag}</td><td style="color:var(--ink-3);font-size:12.5px">${src}</td><td><div class="bar"><span style="width:${r.mixes_with_value / r.mixes * 100}%;${partial ? 'background:var(--warn)' : ''}"></span></div></td><td class="num">${r.mixes_with_value}/${r.mixes}</td></tr>`;
-      }).join('')}
-    </table></div>
-    <p class="note">${dropped ? `Left out: ${dropped}. ` : ''}${d.mixes_left_out?.length ? `Mixes left out because a main ingredient is blank: ${esc(d.mixes_left_out.join(', '))}. ` : ''}${d.conversions.length ? 'Converted ' + esc(d.conversions.join(', ')) + '.' : ''}</p>
-    ${d.tested?.length ? `<h3>Every other column in your files</h3>
-    <p class="note">Each one is tested on your data. Only the ones that help go in the model.</p>
-    <div class="card scroll-x" style="padding:4px 10px"><table>
-      <tr><th>Column</th><th>Result</th><th>Why</th></tr>
-      ${d.tested.map(r => `<tr><td>${esc(label(r.column))}<div style="color:var(--ink-3);font-size:12.5px">${esc(r.file)}</div></td><td style="white-space:nowrap"><span class="tag ${r.status === 'added' ? 'new' : r.status === 'partly logged' ? 'miss' : 'base'}">${esc(r.status)}</span></td><td style="color:var(--ink-2);font-size:13px">${esc(r.why)}</td></tr>`).join('')}
-    </table></div>` : ''}`;
-  }},
-
-  training: { t: 'Training', render: d => {
-    if (d.status !== 'done') {
-      const extras = d.extra_inputs.map(e => esc(label(e).toLowerCase())).join(', ');
-      return `<h2>Training on your data</h2>
-      <p class="lead">Searching for the settings that fit your plant best, with Meta's 10 inputs${extras ? ' and with ' + extras + ' added' : ''}. Every try is tested on mixes it never saw.</p>
-      <div class="card"><div class="bar" style="height:10px"><span style="width:${d.done / d.total * 100}%"></span></div>
-      <p class="note" style="margin:10px 0 0">${d.done} of ${d.total} rounds${d.best_so_far ? ` · best so far ±${fmt(d.best_so_far.rmse_28d)} psi` : ''}</p></div>`;
-    }
-    const max = Math.max(...d.rows.map(r => r.rmse_28d));
-    const chosen = d.rows.find(r => r.chosen);
-    const KNOBS = { gate_tau: 'time-gate τ', shrinkage_sigma: 'shrinkage σ', mll_weight: 'loss mix' };
-    const num = x => +Number(x).toPrecision(3);
-    const changes = Object.keys(KNOBS).filter(k => chosen.settings[k] !== d.meta_default[k]).map(k => `${KNOBS[k]} ${num(d.meta_default[k])} → ${num(chosen.settings[k])}`);
-    const ahead = d.rows.some(r => r.rmse_28d < chosen.rmse_28d);
-    return `<h2>Training on your data</h2>
-    <p class="lead">Each setup learns from part of your mixes and is tested on the rest, so every one of your ${d.model.mixes} mix designs is predicted by a model that never saw it (5-fold cross-validation). The error is how far those 28-day strength predictions are from your real cylinder breaks, on average.</p>
-    <div class="big"><div><div class="n">±${fmt(d.best_rmse_28d)} <span style="font-size:14px;font-weight:400">psi</span></div><div class="l">average 28-day prediction error${d.typical_28d_psi ? `, ${pct(d.best_rmse_28d / d.typical_28d_psi)} of a typical ${fmt(d.typical_28d_psi)} psi mix` : ''}</div></div>${d.gain > 0 ? `<div><div class="n" style="color:var(--accent)">−${pct(d.gain)}</div><div class="l">vs Meta's default setup, retrained</div></div>` : ''}</div>
-    <div class="card scroll-x" style="padding:4px 10px"><table>
-      <tr><th>Setup</th><th class="num">28-day prediction error</th><th style="width:40%"></th></tr>
-      ${d.rows.map((r, i) => `<tr class="${r.chosen ? 'win' : ''}"><td>${esc(r.row)}${i === 0 ? ' <span class="tag base">baseline</span>' : ''}${r.chosen ? ' <span class="tag new">best</span>' : ''}</td><td class="num">${fmt(r.rmse_28d)} psi</td><td><div class="bar"><span style="width:${r.rmse_28d / max * 100}%;${r.chosen ? '' : 'opacity:.4'}"></span></div></td></tr>`).join('')}
-    </table></div>
-    <p class="note">Saved as model ${esc(d.model.version)}. ${changes.length ? 'Tuned settings: ' + changes.join(', ') + '.' : "Re-tuning didn't improve the final model, so it keeps Meta's settings."}${ahead ? ' The best setup is picked on all test ages, so another row can be slightly ahead at 28 days alone.' : ''}${d.left_out?.length ? ` Training tested ${d.left_out.map(c => esc(label(c))).join(', ')} and left ${d.left_out.length > 1 ? 'them' : 'it'} out, because ${d.left_out.length > 1 ? "they didn't" : "it didn't"} help.` : ''}${d.reused ? ' These numbers come from an earlier identical run on the same data.' : ''} psi is pounds per square inch, the US unit of concrete strength (1,000 psi ≈ 6.9 MPa).</p>`;
-  }},
-
-  results: { t: 'Results', render: d => {
-    const ex = d.existing, pr = d.proposals;
-    const xs = [...ex.map(p => p.gwp), ...pr.map(p => p.gwp)], ys = [...ex.map(p => p.psi), ...pr.map(p => p.pred_psi)];
-    const x0 = Math.floor(Math.min(...xs) / 50) * 50 - 10, x1 = Math.ceil(Math.max(...xs) / 50) * 50 + 10;
-    const y0 = Math.floor(Math.min(...ys) / 1000) * 1000, y1 = Math.ceil(Math.max(...ys) / 1000) * 1000;
-    const W = 640, H = 340, m = { l: 56, r: 20, t: 30, b: 40 };
-    const X = v => m.l + (v - x0) / (x1 - x0) * (W - m.l - m.r), Y = v => H - m.b - (v - y0) / (y1 - y0) * (H - m.t - m.b);
-    let g = `<svg viewBox="0 0 ${W} ${H}" width="100%">`;
-    for (let t = y0; t <= y1; t += 1000) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(t)}" y2="${Y(t)}" stroke="${css('--grid')}"/><text x="${m.l - 8}" y="${Y(t) + 4}" text-anchor="end" font-size="11" fill="${css('--ink-3')}">${fmt(t)}</text>`;
-    for (let t = Math.ceil(x0 / 50) * 50; t <= x1; t += 50) g += `<text x="${X(t)}" y="${H - m.b + 16}" text-anchor="middle" font-size="11" fill="${css('--ink-3')}">${t}</text>`;
-    g += `<text x="${(m.l + W - m.r) / 2}" y="${H - 4}" text-anchor="middle" font-size="11.5" fill="${css('--ink-2')}">CO₂ (kg/m³) · lower is better</text><text x="12" y="${m.t - 12}" font-size="11.5" fill="${css('--ink-2')}">28-day strength (psi)</text>`;
-    ex.forEach(p => g += `<circle cx="${X(p.gwp)}" cy="${Y(p.psi)}" r="4" fill="${css('--ink-3')}" opacity=".5"><title>${esc(p.mix)}: ${fmt(p.psi)} psi, ${p.gwp} kg CO₂/m³</title></circle>`);
-    pr.forEach(p => g += `<circle cx="${X(p.gwp)}" cy="${Y(p.pred_psi)}" r="6" fill="${css('--accent')}"/><text x="${X(p.gwp) + 9}" y="${Y(p.pred_psi) + 4}" font-size="12" font-weight="500" fill="${css('--ink')}">${esc(p.id)}</text>`);
-    g += `</svg>`;
-    const unit = d.unit === 'lb/yd3' ? 'lb/yd³' : 'kg/m³';
-    const kept = d.kept.map(e => label(e).toLowerCase()).join(' and ');
-    const best = pr.length ? Math.max(...pr.map(p => p.co2_saving)) : 0;
-    const row = (name, f) => `<tr><td>${name}</td>${pr.map(p => `<td class="num">${f(p)}</td>`).join('')}</tr>`;
-    return `<h2>What model ${esc(d.model)} gives you</h2>
-    <p class="lead">Grey dots are your ${d.compared_with} mix designs. ${pr.length ? `Teal are mixes the model expects to reach the same strength with up to <b>${pct(best)} less CO₂</b>. Test these next.` : 'The model found no lower-CO₂ mix it is confident about yet.'}</p>
-    <div class="card">${g}<div class="legend"><span><i style="background:${css('--ink-3')};opacity:.5"></i>your mixes</span>${pr.length ? `<span><i style="background:${css('--accent')}"></i>proposed</span>` : ''}</div></div>
-    ${pr.length ? `<div class="card scroll-x" style="padding:4px 10px"><table>
-      <tr><th></th>${pr.map(p => `<th class="num">${esc(p.id)}</th>`).join('')}</tr>
-      ${row('Replaces', p => esc(p.replaces))}
-      ${row('CO₂', p => `−${pct(p.co2_saving)}`)}
-      ${row('Predicted 28-day (psi)', p => `${fmt(p.pred_psi)} ± ${fmt(p.plus_minus_psi)}`)}
-      ${row('The mix it replaces, 28-day (psi)', p => fmt(p.target_psi))}
-      ${row('Predicted 7-day (psi)', p => fmt(p.pred_7d_psi))}
-      ${['Cement', 'Fly ash', 'Slag'].map(f => row(f, p => p.composition[f])).join('')}
-      ${d.recipe_extras.map(e => row(esc(label(e)), p => Math.round(p.extras[e]))).join('')}
-      ${['Water', 'HRWR', 'Fine agg.', 'Coarse agg.'].map(f => row(f, p => p.composition[f])).join('')}
-    </table></div>
-    <p class="note">Quantities in ${unit}.${kept ? ` Each keeps the ${esc(kept)} of the mix it replaces.` : ''} ± is the model's 90% uncertainty. Predictions are lab-cured; your QC engineer signs off.</p>` : ''}`;
-  }},
-};
-
-// strength gain: one line per mix over test age (log-spaced so 3 and 7 days don't crowd), median on top
-function strengthChart(curves, ages) {
-  const ys = curves.flatMap(c => c.points.map(p => p[1]));
-  const y0 = Math.floor(Math.min(...ys) / 1000) * 1000, y1 = Math.ceil(Math.max(...ys) / 1000) * 1000;
-  const W = 640, H = 300, m = { l: 56, r: 64, t: 30, b: 40 };
-  const lx = a => Math.log(a + 1), a0 = lx(Math.min(...ages)), a1 = lx(Math.max(...ages));
-  const X = a => m.l + (lx(a) - a0) / (a1 - a0 || 1) * (W - m.l - m.r), Y = v => H - m.b - (v - y0) / (y1 - y0) * (H - m.t - m.b);
-  const line = pts => pts.map(p => `${X(p[0])},${Y(p[1])}`).join(' ');
-  let g = `<svg viewBox="0 0 ${W} ${H}" width="100%">`;
-  for (let t = y0; t <= y1; t += 1000) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(t)}" y2="${Y(t)}" stroke="${css('--grid')}"/><text x="${m.l - 8}" y="${Y(t) + 4}" text-anchor="end" font-size="11" fill="${css('--ink-3')}">${fmt(t)}</text>`;
-  ages.forEach(a => g += `<text x="${X(a)}" y="${H - m.b + 16}" text-anchor="middle" font-size="11" fill="${css('--ink-3')}">${a} d</text>`);
-  g += `<text x="${(m.l + W - m.r) / 2}" y="${H - 4}" text-anchor="middle" font-size="11.5" fill="${css('--ink-2')}">Age at test (days)</text><text x="12" y="${m.t - 12}" font-size="11.5" fill="${css('--ink-2')}">Strength (psi)</text>`;
-  curves.forEach(c => g += `<polyline fill="none" stroke="${css('--ink-3')}" stroke-opacity=".35" stroke-width="1.2" points="${line(c.points)}"><title>${esc(c.mix)}: ${c.points.map(p => `${p[0]} d ${fmt(p[1])}`).join(' · ')} psi</title></polyline>`);
-  const med = ages.map(a => {
-    const v = curves.map(c => c.points.find(p => p[0] === a)?.[1]).filter(x => x != null).sort((p, q) => p - q);
-    return v.length ? [a, v[Math.floor(v.length / 2)]] : null;
-  }).filter(Boolean);
-  g += `<polyline fill="none" stroke="${css('--accent')}" stroke-width="2.5" points="${line(med)}"/>`;
-  med.forEach(p => g += `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="4" fill="${css('--accent')}"/><text x="${X(p[0]) + 8}" y="${Y(p[1]) - 8}" font-size="12" font-weight="500" fill="${css('--ink')}">${fmt(p[1])}</text>`);
-  return g + `</svg>`;
-}
-
-const order = ['data', 'training', 'results'];
-function show(k) {
-  cur = k;
-  $('tabs').innerHTML = order.filter(o => art[o]).map(o => `<button class="ptab ${o === k ? 'on' : ''}" data-a="${o}">${A[o].t}</button>`).join('');
-  $('pbody').innerHTML = art[k] ? A[k].render(art[k]) : '';
-  document.querySelectorAll('.art').forEach(b => b.classList.toggle('on', b.dataset.a === k));
-}
+function restartPrepKeepFiles() { const f = S.files; restartPrep(); S.files = f; }
 
 // ------------------------------------------------------------------ models
 async function loadModels() {
-  const { models } = await (await fetch('/api/models')).json();
-  if (!models.length) { $('modelList').innerHTML = '<p class="blank">No models yet. Train one in Project.</p>'; return; }
-  const last = models[models.length - 1].version;
-  $('modelList').innerHTML = `<div class="card scroll-x" style="padding:4px 10px"><table>
-    <tr><th>Version</th><th>Trained</th><th>Inputs</th><th class="num">Mixes</th><th class="num">28-day error</th><th></th></tr>
-    ${models.slice().reverse().map(m => `<tr class="${m.version === last ? 'win' : ''}"><td>${esc(m.version)}${m.version === last ? ' <span class="tag new">latest</span>' : ''}</td>
-      <td>${new Date(m.trained).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
-      <td>Meta's 10 inputs${m.extra_inputs.map(e => ' + ' + esc(label(e).toLowerCase())).join('')}</td>
-      <td class="num">${m.mixes}</td><td class="num">${fmt(m.rmse_28d)} psi${m.gain > 0 ? ` <span style="color:var(--accent)">−${pct(m.gain)}</span>` : ''}</td>
-      <td style="text-align:right"><button class="btn" style="padding:5px 12px" data-use="${esc(m.version)}">Use in chat</button></td></tr>`).join('')}
-  </table></div>`;
+  models = (await (await fetch('/api/models')).json()).models;
+  if (S.view === 'models') renderView(false);
 }
 
-// ------------------------------------------------------------------ session + events
-function reset() {
+// ------------------------------------------------------------------ session + API
+function reset(model) {
   stream.innerHTML = ''; block = null; lastSeq = -1;
-  for (const k of Object.keys(art)) delete art[k];
-  for (const k of Object.keys(chips)) delete chips[k];
-  cur = null; $('tabs').innerHTML = ''; $('pbody').innerHTML = '<p class="blank">Data, training and results appear here.</p>';
+  chapterRun++; $('chapter').hidden = true;
+  sessionModel = model || null;
+  S = fresh();
+  chDivider('upload');
+  addChat(model ? `Ask model ${esc(model)} about one of your mixes, for example its strength at 7 days, or with more air.` : "Upload your plant's Excel files: mix designs, cylinder breaks and QC logs. I'll take it from there.", 'm-ag');
+  renderAll(false);
 }
 function connect(id) {
   sid = id; history.replaceState(null, '', '#' + id);
   if (es) es.close();
   es = new EventSource(`/api/sessions/${id}/events`);
-  es.onerror = () => { if (es.readyState === EventSource.CLOSED) handlers.error({ text: 'This session is gone because the server restarted. Reload the page to start again.' }); };
+  es.onerror = () => { if (es.readyState === EventSource.CLOSED) errorLine('This session is gone because the server restarted. Reload the page to start again.'); };
   es.onmessage = m => {
     const e = JSON.parse(m.data);
     if (e.seq <= lastSeq) return;
     lastSeq = e.seq;
+    liveEvent = Date.now() / 1000 - e.time < 3;  // an old event is a replay after a reload: no theatre
     handlers[e.type]?.(e);
   };
 }
-function emptyState(model) {
-  const d = document.createElement('div'); d.className = 'empty';
-  d.innerHTML = model
-    ? `<div>Ask model ${esc(model)} about one of your mixes, e.g. <i>its strength at 7 days, or with more air.</i></div>`
-    : `<div>Upload your plant's Excel files: mix designs, cylinder breaks and QC logs.</div>
-       <button class="btn" type="button" id="choose">Choose files</button>`;
-  stream.append(d);
-}
 async function newSession(model) {
-  reset();
-  sessionModel = model || null;
+  reset(model);
   const r = await fetch('/api/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: model || null }) });
   connect((await r.json()).id);
-  emptyState(model);
 }
+const busyText = 'Wait until MixPilot has finished, then try again.';
 async function upload(files) {
   if (!files.length) return;
-  if (!sid) await newSession();
+  if (!sid) { const keep = S.pending; await newSession(); S.pending = keep; }
+  S.uploading = true; touch();
   const fd = new FormData();
   for (const f of files) fd.append('files', f);
   const r = await fetch(`/api/sessions/${sid}/files`, { method: 'POST', body: fd });
-  if (!r.ok) handlers.error({ text: r.status === 409 ? 'Wait until MixPilot has finished, then try again.' : (await r.json()).detail });
+  S.uploading = false;
+  if (!r.ok) errorLine(r.status === 409 ? busyText : (await r.json()).detail);
+  touch();
+}
+function addFiles(list) {
+  if (S.live !== 'upload') return upload(list);  // a project under way: they go straight to the agent
+  const known = new Set(S.pending.map(f => f.name));
+  S.pending.push(...list.filter(f => !known.has(f.name)));
+  renderAll(false);
+}
+async function setInput(name, use) {
+  const r = await fetch(`/api/sessions/${sid}/inputs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, use }) });
+  if (!r.ok) errorLine(r.status === 409 ? busyText : (await r.json()).detail);
+}
+async function startTraining() {
+  const r = await fetch(`/api/sessions/${sid}/train`, { method: 'POST' });
+  if (!r.ok) errorLine((await r.json()).detail);
+}
+async function send(text) {
+  if (!text || S.busy) return;
+  if (!sid) { const keep = S.pending; await newSession(); S.pending = keep; }
+  const r = await fetch(`/api/sessions/${sid}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+  if (!r.ok) errorLine(r.status === 409 ? busyText : (await r.json()).detail);
 }
 
+// ------------------------------------------------------------------ interaction
 document.addEventListener('click', async e => {
-  const a = e.target.closest('[data-a]'); if (a) show(a.dataset.a);
-  const v = e.target.closest('[data-v]');
-  if (v) { document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('on', b === v)); document.querySelectorAll('.view').forEach(x => x.classList.toggle('on', x.id === v.dataset.v)); if (v.dataset.v === 'models') loadModels(); }
-  if (e.target.id === 'choose' || e.target.id === 'attach') $('picker').click();
-  const inp = e.target.closest('button[data-input]');
-  if (inp) {
-    inp.disabled = true;
-    const r = await fetch(`/api/sessions/${sid}/inputs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: inp.dataset.input }) });
-    if (!r.ok) { inp.disabled = false; handlers.error({ text: r.status === 409 ? 'Wait until MixPilot has finished, then try again.' : (await r.json()).detail }); }
+  const t = e.target;
+  const to = t.closest('[data-go]'); if (to) return go(to.dataset.go);
+  const step = t.closest('[data-step]'); if (step && !step.disabled) { const i = +step.dataset.step; S.prep.open = S.prep.open === i ? -1 : i; return renderView(false); }
+  const dec = t.closest('[data-decide]');
+  if (dec) {
+    const name = dec.dataset.input, want = dec.dataset.decide;
+    if (S.busy) return errorLine(busyText);
+    if (S.decisions[name] === want) { delete S.editing[name]; renderChatCards(); return touch(); }
+    return setInput(name, want === 'use');
   }
-  if (e.target.id === 'train') {
-    e.target.disabled = true; e.target.textContent = 'Training…';
-    const r = await fetch(`/api/sessions/${sid}/train`, { method: 'POST' });
-    if (!r.ok) { e.target.disabled = false; e.target.textContent = 'Train model'; handlers.error({ text: (await r.json()).detail }); }
-  }
-  const use = e.target.closest('[data-use]');
+  const edit = t.closest('[data-edit]'); if (edit) { S.editing[edit.dataset.edit] = true; renderChatCards(); return touch(); }
+  const sel = t.closest('[data-sel]'); if (sel) { S.sel = +sel.dataset.sel; renderView(false); return renderComposer(); }
+  const q = t.closest('[data-say]'); if (q) return send(q.dataset.say);
+  const ask = t.closest('[data-ask]'); if (ask) { openChat(true); $('msg').value = `What does ${ask.dataset.ask} reach at 7 days?`; return $('msg').focus(); }
+  const rm = t.closest('[data-remove]'); if (rm) { S.pending.splice(+rm.dataset.remove, 1); return renderAll(false); }
+  const use = t.closest('[data-use]');
   if (use) {
-    document.querySelector('[data-v=project]').click();
     if (use.dataset.use !== sessionModel) await newSession(use.dataset.use);
-    $('msg').focus();
+    else if (S.art.results) go('results');
+    openChat(true); return $('msg').focus();
+  }
+  const act = t.closest('[data-act]');
+  if (act) {
+    const a = act.dataset.act;
+    if (a === 'pick') $('picker').click();
+    if (a === 'start') upload([...S.pending]);
+    if (a === 'train') startTraining();
   }
 });
-$('picker').addEventListener('change', e => { upload([...e.target.files]); e.target.value = ''; });
-$('composer').addEventListener('submit', async e => {
+document.addEventListener('toggle', e => { if (e.target.id === 'leftOut') S.leftOpen = e.target.open; }, true);
+$('attach').addEventListener('click', () => $('picker').click());
+$('picker').addEventListener('change', e => { addFiles([...e.target.files]); e.target.value = ''; });
+function bindDrop() {
+  const z = $('drop'); if (!z) return;
+  ['dragenter', 'dragover'].forEach(n => z.addEventListener(n, e => { e.preventDefault(); z.classList.add('over'); }));
+  z.addEventListener('dragleave', () => z.classList.remove('over'));
+  z.addEventListener('drop', e => { e.preventDefault(); addFiles([...e.dataTransfer.files]); });
+}
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => e.preventDefault());
+$('composer').addEventListener('submit', e => {
   e.preventDefault();
-  const text = $('msg').value.trim();
-  if (!text || busy) return;
-  if (!sid) await newSession();
+  const v = $('msg').value.trim();
+  if (!v || S.busy) return;
   $('msg').value = '';
-  const r = await fetch(`/api/sessions/${sid}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
-  if (!r.ok) handlers.error({ text: r.status === 409 ? 'Wait until MixPilot has finished, then try again.' : (await r.json()).detail });
+  send(v);
 });
-matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => cur && show(cur));
+
+function openChat(open) {
+  chatOpen = open;
+  document.body.classList.toggle('chat-off', !open);
+  if (open) { S.unread = false; scrollChat(); }
+  renderStatus();
+  renderView(true);
+  $('view').firstChild?.classList.remove('enter');
+  if (!reduced()) $('view').firstChild?.classList.add('reflow');
+  $(open ? 'collapse' : 'pill').focus({ preventScroll: true });
+}
+$('collapse').addEventListener('click', () => openChat(false));
+$('pill').addEventListener('click', () => { openChat(true); if (!S.busy) $('msg').focus({ preventScroll: true }); });
+
+// tooltips: a mark's hit target says what it is
+const tip = $('tip');
+document.addEventListener('pointermove', e => {
+  const t = e.target.closest?.('[data-tip]');
+  if (!t) { tip.classList.remove('on'); return; }
+  tip.textContent = t.dataset.tip;
+  tip.classList.add('on');
+  const r = tip.getBoundingClientRect(), x = Math.min(e.clientX + 14, innerWidth - r.width - 10), y = e.clientY - r.height - 12;
+  tip.style.left = x + 'px'; tip.style.top = (y < 8 ? e.clientY + 16 : y) + 'px';
+});
+
+// 1-5 switch phases, / goes to the chat. No animation on these: they are used often.
+document.addEventListener('keydown', e => {
+  if (e.target.matches?.('input') || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (/^[1-5]$/.test(e.key)) { const k = ORDER[+e.key - 1]; if (phaseState(k) !== 'locked' && S.view !== k) { S.view = k; S.seen[k] = true; renderAll(false); } }
+  if (e.key === '/') { e.preventDefault(); openChat(true); $('msg').focus(); }
+});
+function fitLayout() {
+  document.body.dataset.layer = innerWidth < 1000 ? 'over' : 'beside';  // too narrow to sit beside the view
+  renderTimeline(); renderView(false);
+}
+let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(fitLayout, 120); });
+
+const dark = matchMedia('(prefers-color-scheme: dark)');
+const setTheme = () => { document.documentElement.dataset.theme = dark.matches ? 'dark' : 'light'; };
+dark.addEventListener('change', setTheme); setTheme();
 // a failed fetch means the server is down; say so instead of leaving an empty chat
-addEventListener('unhandledrejection', e => { if (e.reason instanceof TypeError) handlers.error({ text: "Can't reach the MixPilot server. Start it, then reload the page." }); });
+addEventListener('unhandledrejection', e => { if (e.reason instanceof TypeError) errorLine("Can't reach the MixPilot server. Start it, then reload the page."); });
 
 (async () => {
+  document.body.dataset.layer = innerWidth < 1000 ? 'over' : 'beside';
+  if (innerWidth < 1000) { chatOpen = false; document.body.classList.add('chat-off'); }
   const id = location.hash.slice(1);
+  reset();
   if (id && (await fetch(`/api/sessions/${id}`)).ok) connect(id);
-  else { reset(); emptyState(); }
 })();
 </script>
 </body>

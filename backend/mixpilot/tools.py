@@ -27,7 +27,17 @@ class ToolError(Exception):
 
 def read_files(s: Session) -> dict:
     """Profile every uploaded sheet and suggest join keys."""
-    return dict(files=[excel.profile(sh) for sh in s.sheets], join_keys=excel.join_keys(s.sheets))
+    files, joins = [excel.profile(sh) for sh in s.sheets], excel.join_keys(s.sheets)
+    s.emit("artifact", name="prep", data=dict(  # starts over: these files are what the rest builds on
+        files=[dict(file=f["file"], sheet=f["sheet"], header_row=f["header_row"], rows=f["rows"],
+                    columns=len(f["columns"])) for f in files],
+        joins=[dict(a=j["a"], b=j["b"], shared=j["shared_values"]) for j in joins[:4]]))
+    return dict(files=files, join_keys=joins)
+
+
+def _prep(s: Session, **found) -> None:
+    """Add what a prep step found to the Prepare view."""
+    s.emit("artifact", name="prep", data={**s.artifacts.get("prep", {}), **found})
 
 
 def map_columns(s: Session, mapping: dict) -> dict:
@@ -41,6 +51,9 @@ def map_columns(s: Session, mapping: dict) -> dict:
     s.mapping, s.data, s.map_report = mapping, ds, report
     s.validation = s.suggestions = None
     s.accepted, s.offered, s.ready_to_train = [], {}, False
+    _prep(s, mapped=_mapped(mapping, report), assumptions=report["assumptions"], dropped=report["dropped"],
+          cylinders_read=int(report["tests_matched"].split("/")[1]), cylinders_used=ds.cylinders,
+          candidates=list(ds.candidates))
     return dict(ok=True, **report, notes_still_counted=_notes_still_counted(sheets, mapping),
                 candidate_columns=[dict(column=c.name, level=c.level, kind=c.kind, file=c.file)
                                    for c in ds.candidates.values()])
@@ -68,6 +81,7 @@ def _notes_still_counted(sheets: list, mapping: dict) -> dict[str, list[str]]:
 def validate_data(s: Session) -> dict:
     _need_data(s)
     s.validation = validate.validate(s.data, s.mapping, s.map_report)
+    _prep(s, issues=s.validation["issues"])
     _data_artifact(s)
     return s.validation
 
@@ -91,7 +105,7 @@ def suggest_inputs(s: Session) -> dict:
                why=_why(by_name[c]))
     for c, r in s.offered.items():
         s.emit("card", kind="input_incomplete", input=c, file=s.data.candidates[c].file, **_counts(s, c),
-               why=_why_partial(r, "On those batches it"), recorded_from=r.get("recorded_from"))
+               why=_why_partial(r, "On those batches it"), recorded_from=r.get("recorded_from"), timeline=_timeline(s, c))
     _data_artifact(s)
     return dict(added=s.accepted, offered=list(s.offered), columns=found["columns"], method=found["method"],
                 note="'added' inputs will be used in training. Recipe ingredients among them have no test result "
@@ -113,6 +127,18 @@ def use_input(s: Session, name: str) -> dict:
                 note="batches without a value get the plant's median")
 
 
+def leave_out_input(s: Session, name: str) -> dict:
+    """The card's "Leave it out" button: train without an offered partly logged input."""
+    if name not in s.offered:
+        raise ToolError(f"{name!r} is not on offer; offered inputs are {sorted(s.offered)}")
+    if name in s.accepted:
+        s.accepted.remove(name)
+    s.ready_to_train = True
+    s.emit("input_left_out", input=name)
+    _data_artifact(s)
+    return dict(input=name, used_in_training=False, inputs=s.accepted)
+
+
 def mapping_help() -> dict:
     """What map_columns accepts: fields, units and an example (goes in the tool description)."""
     return dict(fields={f: sorted(u) for f, u in units.UNITS.items()}, recipe_fields=RECIPE_FIELDS,
@@ -126,6 +152,17 @@ def _need_data(s: Session) -> None:
 
 def _counts(s: Session, c: str) -> dict:
     return dict(mixes_with_value=int(s.data.feature(c).notna().sum()), mixes=len(s.data.batches))
+
+
+def _timeline(s: Session, c: str) -> list[dict] | None:
+    """Which batches have the column, oldest first, if the files date their batches."""
+    has = s.data.feature(c).notna()
+    batches = s.data.batches.set_index("batch")
+    for name, k in s.data.candidates.items():
+        if k.kind == "date" and k.level == "batch":
+            dates = pd.to_datetime(batches[name], errors="coerce").dropna().sort_values()
+            return [dict(date=d.date().isoformat(), has=bool(has.loc[b])) for b, d in dates.items()]
+    return None
 
 
 def _why(r: dict) -> str:
@@ -190,6 +227,24 @@ def _conversions(report: dict) -> list[str]:
     return out
 
 
+FIELD_NAMES = {"cement": "Cement", "fly_ash": "Fly ash", "slag": "Slag", "water": "Water", "hrwr": "HRWR",
+               "fine": "Fine aggregate", "coarse": "Coarse aggregate", "cure_temp": "Curing temperature",
+               "age": "Age at test", "strength": "Strength, the output"}
+
+
+def _mapped(mapping: dict, report: dict) -> list[dict]:
+    """Each mapped column, the model field it became, and the unit change it needed."""
+    changes = {}
+    for entry in report["conversions"]:
+        column, change = entry.rsplit(": ", 1)
+        unit, target = change.split(" -> ")
+        if units.normalize_unit(unit) in UNIT_NAMES:
+            changes[column] = f"{UNIT_NAMES[units.normalize_unit(unit)]} → {UNIT_TARGETS[target]}"
+    return [dict(column=spec["column"], field=FIELD_NAMES.get(field, field), change=changes.get(spec["column"]))
+            for section in ("recipes", "batches", "tests")
+            for field, spec in mapping.get(section, {}).get("fields", {}).items()]
+
+
 def _data_artifact(s: Session) -> None:
     ds, report = s.data, s.map_report
     if s.validation is None:
@@ -236,9 +291,14 @@ def train(s: Session, n_bayes: int = 10, use_cache: bool = True) -> dict:
     ds, extras = s.data, list(s.accepted)
     total = automl.n_rounds(n_bayes=n_bayes)
 
-    def running(done: int, best: float | None) -> None:
+    search = []
+
+    def running(done: int, best: float | None, latest: dict | None = None) -> None:
+        if latest:
+            search.append(_search_round(done, latest["source"], latest.get(BASE_SETUP),
+                                        next((v for k, v in latest.items() if k not in ("source", BASE_SETUP)), None)))
         s.emit("artifact", name="training", data=dict(
-            status="running", done=done, total=total, extra_inputs=extras,
+            status="running", done=done, total=total, extra_inputs=extras, search=list(search),
             best_so_far=dict(rmse_28d=round(best)) if best is not None and best < float("inf") else None))
 
     running(0, None)
@@ -270,8 +330,10 @@ def train(s: Session, n_bayes: int = 10, use_cache: bool = True) -> dict:
         meta_default=s.training["meta_default"], ages=[r for r in board[0]["errors_by_age_psi"]], reused=reused,
         typical_28d_psi=round(float(at_28.median())) if len(at_28) else None,
         rows=[dict(row=r["name"], rmse_28d=r["error_28d_psi"], settings=r["settings"], extra_inputs=r["inputs"],
-                   chosen=r["best"]) for r in board],
+                   chosen=r["best"], baseline=r["baseline"], folds=r["folds_won_vs_baseline"],
+                   folds_vs_meta=r.get("folds_won_vs_meta_settings")) for r in board],
         model=dict(version=s.model, mixes=s.model_meta["recipes"]), left_out=left_out,
+        search=_search(s.training["trials"]),
     ))
     s.emit("models_updated", model=s.model)
     return dict(ok=True, more_accurate_than_baseline_percent=round(100 * gain), tuning_helped=s.training["tuning_helped"],
@@ -300,6 +362,26 @@ def _apply_checks(s: Session, checks: list[dict]) -> list[str]:
     if checks:
         _data_artifact(s)
     return left_out
+
+
+BASE_SETUP = "Meta's 10 inputs"
+SEARCH_KINDS = {"meta default": "Meta's settings", "sobol": "Exploring", "bayes-opt": "Searching"}
+
+
+def _search_round(n: int, source: str, base: float | None, plus: float | None) -> dict:
+    """One round of the search: the 28-day error with Meta's 10 inputs and with the new inputs."""
+    def psi(x: float | None) -> int | None:
+        return round(x) if x is not None and x < float("inf") else None
+
+    return dict(round=n, kind=SEARCH_KINDS.get(source, source), base=psi(base), plus=psi(plus))
+
+
+def _search(trials: list[dict]) -> list[dict]:
+    """The same rounds from a finished run, whose trials alternate between the input sets."""
+    base = [t for t in trials if t["setup"] == BASE_SETUP]
+    plus = [t for t in trials if t["setup"] != BASE_SETUP] or [{}] * len(base)
+    return [_search_round(i + 1, b["source"], b["error_28d_psi"], p.get("error_28d_psi"))
+            for i, (b, p) in enumerate(zip(base, plus))]
 
 
 def _run_key(ds: Dataset, extras: list[str], n_bayes: int) -> str:
@@ -341,6 +423,8 @@ def get_results(s: Session, version: str | None = None) -> dict:
         p["composition"] = {design.LABELS[f]: round(v / factor, 1 if f == "hrwr" else None)
                             for f, v in p["composition_kg_m3"].items()}
         p["composition_unit"] = unit
+        p["recipe_composition"] = {design.LABELS[f]: round(v / factor, 1 if f == "hrwr" else None)
+                                   for f, v in p["recipe_composition_kg_m3"].items()}
         p["plus_minus_28d_psi"] = round(1.645 * p.pop("sd_28d_psi"))  # 90%, the same ± the chat's predict gives
     s.emit("artifact", name="results", data=dict(
         model=meta["version"], compared_with=len(out["recipes"]), unit=unit, kept=kept,
@@ -351,7 +435,10 @@ def get_results(s: Session, version: str | None = None) -> dict:
         proposals=[dict(id=p["id"], gwp=p["gwp_kg_m3"], pred_psi=p["predicted_28d_psi"],
                         plus_minus_psi=p["plus_minus_28d_psi"], pred_7d_psi=p["predicted_7d_psi"],
                         target_psi=p["target_28d_psi"], composition=p["composition"], co2_saving=p["co2_saving"],
-                        replaces=p["replaces"], extras=p["extras"]) for p in out["proposals"]],
+                        replaces=p["replaces"], extras=p["extras"],
+                        today=dict(gwp=p["recipe_gwp_kg_m3"], pred_7d_psi=p["recipe_7d_psi"],
+                                   composition=p["recipe_composition"], extras=p["recipe_extras"]))
+                   for p in out["proposals"]],
     ))
     for p in out["proposals"]:
         p["co2_saving_percent"] = round(100 * p.pop("co2_saving"))
