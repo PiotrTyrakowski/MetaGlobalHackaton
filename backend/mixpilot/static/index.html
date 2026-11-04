@@ -59,6 +59,8 @@ button:disabled{cursor:default;opacity:.55}
 .find .h{font-weight:600;font-size:13px}
 .find.new .h{color:var(--accent)} .find.miss .h{color:var(--warn)}
 .find .d{font-size:13px;color:var(--ink-2)}
+.find .use{margin-top:8px}
+.btn.sm{padding:5px 12px;font-size:13px}
 .btn{background:var(--accent);color:var(--on-accent);border:0;border-radius:8px;padding:8px 16px;font-weight:500;align-self:flex-start}
 .btn.ghost{background:none;border:1px solid var(--line-strong);color:var(--ink)}
 .status{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-3)}
@@ -71,7 +73,6 @@ button:disabled{cursor:default;opacity:.55}
 .clip{border:0;background:none;color:var(--ink-3);padding:4px 6px;font-size:13px}
 .empty{margin:auto;text-align:center;color:var(--ink-2);display:flex;flex-direction:column;gap:12px;align-items:center;max-width:320px}
 .empty .btn{align-self:center}
-.link{border:0;background:none;color:var(--ink-3);text-decoration:underline;font-size:13px;padding:0}
 
 .pane{display:flex;flex-direction:column;min-height:0}
 .ptabs{display:flex;gap:2px;padding:8px 14px 0;border-bottom:1px solid var(--line);min-height:41px}
@@ -110,7 +111,6 @@ svg text{font-family:var(--sans)}
 #models{padding:28px;overflow:auto}
 #models.on{display:block}
 #models .wrap{max-width:900px;margin:0 auto}
-.foot{position:fixed;bottom:10px;right:14px;font-size:11px;color:var(--ink-3)}
 @media (max-width:900px){#project.on{display:block;overflow:auto}.chat{border-right:0;border-bottom:1px solid var(--line);min-height:70vh}.stream{overflow:visible}.pbody{padding:20px 16px}#models{padding:20px 16px}}
 </style>
 </head>
@@ -143,7 +143,6 @@ svg text{font-family:var(--sans)}
   <div id="modelList"></div>
 </div></main>
 
-<div class="foot" id="foot"></div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -162,7 +161,7 @@ const FRIENDLY = { 'air': 'Air content', 'site water': 'Water added on site' };
 const label = name => NAMES[name] || FRIENDLY[name.replace(/ \(.*\)$/, '').toLowerCase()] || name.replace(/ \(.*\)$/, '');
 
 // ------------------------------------------------------------------ state
-let sid = null, es = null, lastSeq = -1, block = null, busy = false, isDemo = false;
+let sid = null, es = null, lastSeq = -1, block = null, busy = false;
 const art = {};               // artifact name -> latest data
 const chips = {};             // artifact name -> chip element in chat
 let cur = null;
@@ -223,8 +222,8 @@ const handlers = {
       const where = e.mixes_with_value === e.mixes ? `all ${e.mixes} mixes` : `${e.mixes_with_value} of ${e.mixes} mixes`;
       d.innerHTML = `<div class="h">${esc(name)}: ready to use</div><div class="d">In ${esc(e.file)} for ${where}. Added as a new model input.</div>`;
     } else {
-      d.className = 'find miss';
-      d.innerHTML = `<div class="h">${esc(name)}: only ${e.mixes_with_value} of ${e.mixes} mixes</div><div class="d">On the mixes that have it, 28-day error drops from ${fmt(e.rmse_28d_without)} to ${fmt(e.rmse_28d_with)} psi. Record it for every mix and the model gets better.</div>`;
+      d.className = 'find miss'; d.dataset.card = e.input;
+      d.innerHTML = `<div class="h">${esc(name)}: only ${e.mixes_with_value} of ${e.mixes} mixes</div><div class="d">On those mixes it makes the model's 28-day strength predictions ${pct(e.gain)} more accurate.</div><div class="use"><button class="btn sm" data-input="${esc(e.input)}">Use it in training</button></div>`;
     }
     addItem(d);
   },
@@ -239,13 +238,18 @@ const handlers = {
     const d = e.data;
     if (e.name === 'data') chip('data', 'Data', `${d.mixes} mixes · model inputs and coverage`);
     if (e.name === 'training') {
-      chip('training', 'Training', d.status === 'done' ? `${d.rows.length} setups · best −${pct(d.gain)}` : `${d.done} of ${d.total} setups`);
+      chip('training', 'Training', d.status === 'done' ? `${d.total} setups · best −${pct(d.gain)}` : `${d.done} of ${d.total} setups`);
       if (d.status === 'running') setStatus(`Training: ${d.done} of ${d.total} setups`);
       if (!cur || cur === 'data') show('training');
     }
     if (e.name === 'results') { chip('results', 'Results', 'less CO₂ at the same strength'); show('results'); }
     if (e.name === 'data' && !cur) show('data');
     if (cur === e.name) show(cur);
+  },
+  input_used(e) {
+    document.querySelectorAll('.find[data-card]').forEach(c => {
+      if (c.dataset.card === e.input) c.querySelector('.use').innerHTML = '<span class="tag new">used in training</span>';
+    });
   },
   models_updated() { $('train')?.remove(); loadModels(); },
   error(e) { const d = document.createElement('div'); d.className = 'err'; d.textContent = e.text; addItem(d); },
@@ -267,7 +271,7 @@ const A = {
     <p class="lead">The model learns to predict your concrete's strength at each test age from the mix inputs below.</p>
     <div class="big"><div><div class="n">${n}</div><div class="l">mixes</div></div><div><div class="n">${fmt(d.cylinders_used)}</div><div class="l">cylinders used, of ${fmt(d.cylinders_read)}</div></div><div><div class="n">${d.ages.join(' · ')}</div><div class="l">test ages (days)</div></div></div>
     ${o ? `<h3>Output: concrete strength</h3>
-    <p class="note">From ${esc(o.source.file)} · ${esc(o.source.column)} at ${esc(o.age.column)}. One line per mix, the average of its cylinders.</p>
+    <p class="note">From ${esc(o.source.file)} · ${esc(o.source.column)} at ${esc(o.age.column)}. One line per mix, the average of its cylinders. psi (pounds per square inch) is the US unit of concrete strength.</p>
     <div class="card">${strengthChart(o.curves, d.ages)}<div class="legend"><span><i style="background:${css('--ink-3')};opacity:.5"></i>each mix</span><span><i style="background:${css('--accent')}"></i>median of your mixes</span></div></div>` : ''}
     <h3>Inputs</h3>
     <p class="note">Where each input came from and how many of your ${n} mixes have it.</p>
@@ -275,7 +279,7 @@ const A = {
       <tr><th>Input</th><th>From</th><th style="width:26%">Coverage</th><th class="num"></th></tr>
       ${d.coverage.map(r => {
         const k = r.status === 'new' ? 'new' : r.status === 'incomplete' ? 'miss' : '';
-        const tag = k === 'new' ? ' <span class="tag new">new · added</span>' : k === 'miss' ? ' <span class="tag miss">collect more</span>' : '';
+        const tag = k === 'new' ? ' <span class="tag new">new · added</span>' : k === 'miss' ? ' <span class="tag miss">partly logged</span>' : '';
         const src = r.source ? `${esc(r.source.file)} · ${esc(r.source.column)}` : '';
         return `<tr class="${k ? 'hl-' + k : ''}"><td>${esc(label(r.input))}${tag}</td><td style="color:var(--ink-3);font-size:12.5px">${src}</td><td><div class="bar"><span style="width:${r.mixes_with_value / r.mixes * 100}%;${k === 'miss' ? 'background:var(--warn)' : ''}"></span></div></td><td class="num">${r.mixes_with_value}/${r.mixes}</td></tr>`;
       }).join('')}
@@ -286,9 +290,9 @@ const A = {
   training: { t: 'Training', render: d => {
     if (d.status !== 'done') {
       return `<h2>Training on your data</h2>
-      <p class="lead">Trying ${d.total} setups${d.extra_inputs.length ? ', with and without ' + d.extra_inputs.map(e => esc(label(e).toLowerCase())).join(', ') : ''}. Each is scored on mixes it never saw.</p>
+      <p class="lead">Trying ${d.total} setups${d.extra_inputs.length ? ', adding ' + d.extra_inputs.map(e => esc(label(e).toLowerCase())).join(', then ') + ' one at a time' : ''}. Each is tested on mixes it never saw.</p>
       <div class="card"><div class="bar" style="height:10px"><span style="width:${d.done / d.total * 100}%"></span></div>
-      <p class="note" style="margin:10px 0 0">${d.done} of ${d.total} setups${d.best_so_far ? ` · best so far ${fmt(d.best_so_far.rmse_28d)} psi` : ''}</p></div>`;
+      <p class="note" style="margin:10px 0 0">${d.done} of ${d.total} setups${d.best_so_far ? ` · best so far ±${fmt(d.best_so_far.rmse_28d)} psi` : ''}</p></div>`;
     }
     const max = Math.max(...d.rows.map(r => r.rmse_28d));
     const chosen = d.rows.find(r => r.chosen);
@@ -296,17 +300,17 @@ const A = {
     if (chosen && chosen.settings.gate_tau !== 0.1) changes.push(`time-gate τ 0.10 → ${chosen.settings.gate_tau.toFixed(2)}`);
     if (chosen && chosen.settings.mll_weight !== 0.5) changes.push(`loss mix 0.5 → ${chosen.settings.mll_weight}`);
     return `<h2>Training on your data</h2>
-    <p class="lead">Each setup is trained on your ${d.model.mixes} mixes and scored on mixes it never saw (5-fold cross-validation). Lower error is better.</p>
-    <div class="big"><div><div class="n">${fmt(d.best_rmse_28d)} <span style="font-size:14px;font-weight:400">psi</span></div><div class="l">28-day error, best</div></div><div><div class="n" style="color:var(--accent)">−${pct(d.gain)}</div><div class="l">vs Meta's default setup</div></div></div>
+    <p class="lead">Each setup learns from part of your mixes and is tested on the rest, so every one of your ${d.model.mixes} mixes is predicted by a model that never saw it (5-fold cross-validation). The error is how far those 28-day strength predictions are from your real cylinder breaks, on average. Each row adds one thing to the row above.</p>
+    <div class="big"><div><div class="n">±${fmt(d.best_rmse_28d)} <span style="font-size:14px;font-weight:400">psi</span></div><div class="l">average 28-day prediction error${d.typical_28d_psi ? `, ${pct(d.best_rmse_28d / d.typical_28d_psi)} of a typical ${fmt(d.typical_28d_psi)} psi mix` : ''}</div></div><div><div class="n" style="color:var(--accent)">−${pct(d.gain)}</div><div class="l">vs Meta's default setup</div></div></div>
     <div class="card scroll-x" style="padding:4px 10px"><table>
-      <tr><th>Setup</th><th class="num">28-day error</th><th style="width:40%"></th></tr>
-      ${d.rows.map((r, i) => `<tr class="${r.chosen ? 'win' : ''}"><td>${esc(r.row)}${i === 0 ? ' <span class="tag base">baseline</span>' : ''}${r.chosen ? ' <span class="tag new">best</span>' : ''}</td><td class="num">${fmt(r.rmse_28d)} psi</td><td><div class="bar"><span style="width:${r.rmse_28d / max * 100}%;${r.chosen ? '' : 'opacity:.4'}"></span></div></td></tr>`).join('')}
+      <tr><th>Setup</th><th class="num">28-day prediction error</th><th style="width:40%"></th></tr>
+      ${d.rows.map((r, i) => `<tr class="${r.chosen ? 'win' : ''}"><td>${esc(r.row.startsWith('+ ') && r.extra_inputs.length ? '+ ' + label(r.extra_inputs.at(-1)).toLowerCase() : r.row)}${i === 0 ? ' <span class="tag base">baseline</span>' : ''}${r.chosen ? ' <span class="tag new">best</span>' : ''}</td><td class="num">${fmt(r.rmse_28d)} psi</td><td><div class="bar"><span style="width:${r.rmse_28d / max * 100}%;${r.chosen ? '' : 'opacity:.4'}"></span></div></td></tr>`).join('')}
     </table></div>
-    <p class="note">Saved as model ${esc(d.model.version)}.${changes.length ? ' Tuned settings: ' + changes.join(', ') + '.' : ''}</p>`;
+    <p class="note">Saved as model ${esc(d.model.version)}.${changes.length ? ' Tuned settings: ' + changes.join(', ') + '.' : ''} psi is pounds per square inch, the US unit of concrete strength (1,000 psi ≈ 6.9 MPa).</p>`;
   }},
 
   results: { t: 'Results', render: d => {
-    const ex = d.existing, pr = d.proposals, fr = d.front;
+    const ex = d.existing, pr = d.proposals;
     const xs = [...ex.map(p => p.gwp), ...pr.map(p => p.gwp)], ys = [...ex.map(p => p.psi), ...pr.map(p => p.pred_psi)];
     const x0 = Math.floor(Math.min(...xs) / 50) * 50 - 10, x1 = Math.ceil(Math.max(...xs) / 50) * 50 + 10;
     const y0 = Math.floor(Math.min(...ys) / 1000) * 1000, y1 = Math.ceil(Math.max(...ys) / 1000) * 1000;
@@ -316,8 +320,6 @@ const A = {
     for (let t = y0; t <= y1; t += 1000) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(t)}" y2="${Y(t)}" stroke="${css('--grid')}"/><text x="${m.l - 8}" y="${Y(t) + 4}" text-anchor="end" font-size="11" fill="${css('--ink-3')}">${fmt(t)}</text>`;
     for (let t = Math.ceil(x0 / 50) * 50; t <= x1; t += 50) g += `<text x="${X(t)}" y="${H - m.b + 16}" text-anchor="middle" font-size="11" fill="${css('--ink-3')}">${t}</text>`;
     g += `<text x="${(m.l + W - m.r) / 2}" y="${H - 4}" text-anchor="middle" font-size="11.5" fill="${css('--ink-2')}">CO₂ (kg/m³) · lower is better</text><text x="12" y="${m.t - 12}" font-size="11.5" fill="${css('--ink-2')}">28-day strength (psi)</text>`;
-    const frIn = fr.filter(p => p.gwp >= x0 && p.gwp <= x1 && p.psi >= y0 && p.psi <= y1);
-    if (frIn.length > 1) g += `<polyline fill="none" stroke="${css('--accent')}" stroke-opacity=".35" stroke-width="1.5" stroke-dasharray="4 4" points="${frIn.map(p => `${X(p.gwp)},${Y(p.psi)}`).join(' ')}"/>`;
     ex.forEach(p => g += `<circle cx="${X(p.gwp)}" cy="${Y(p.psi)}" r="4" fill="${css('--ink-3')}" opacity=".5"><title>${esc(p.mix)}: ${fmt(p.psi)} psi, ${p.gwp} kg CO₂/m³</title></circle>`);
     pr.forEach((p, i) => g += `<circle cx="${X(p.gwp)}" cy="${Y(p.pred_psi)}" r="6" fill="${css('--accent')}"/><text x="${X(p.gwp) + 9}" y="${Y(p.pred_psi) + 4}" font-size="12" font-weight="500" fill="${css('--ink')}">P-${i + 1}</text>`);
     g += `</svg>`;
@@ -391,7 +393,6 @@ function reset() {
   for (const k of Object.keys(art)) delete art[k];
   for (const k of Object.keys(chips)) delete chips[k];
   cur = null; $('tabs').innerHTML = ''; $('pbody').innerHTML = '<p class="blank">Data, training and results appear here.</p>';
-  $('foot').textContent = isDemo ? 'Demo data is synthetic' : '';
 }
 function connect(id) {
   sid = id; history.replaceState(null, '', '#' + id);
@@ -410,12 +411,11 @@ function emptyState(model) {
   d.innerHTML = model
     ? `<div>Ask model ${esc(model)} about a mix, e.g. <i>what will R-101 reach at 7 days?</i></div>`
     : `<div>Upload your plant's Excel files: mix designs, cylinder breaks and QC logs.</div>
-       <button class="btn" type="button" id="choose">Choose files</button>
-       <button class="link" type="button" id="demo">or use the demo files</button>`;
+       <button class="btn" type="button" id="choose">Choose files</button>`;
   stream.append(d);
 }
 async function newSession(model) {
-  isDemo = false; reset();
+  reset();
   const r = await fetch('/api/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: model || null }) });
   connect((await r.json()).id);
   emptyState(model);
@@ -434,10 +434,11 @@ document.addEventListener('click', async e => {
   const v = e.target.closest('[data-v]');
   if (v) { document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('on', b === v)); document.querySelectorAll('.view').forEach(x => x.classList.toggle('on', x.id === v.dataset.v)); if (v.dataset.v === 'models') loadModels(); }
   if (e.target.id === 'choose' || e.target.id === 'attach') $('picker').click();
-  if (e.target.id === 'demo') {
-    isDemo = true; reset();
-    const r = await fetch('/api/sessions/demo', { method: 'POST' });
-    connect((await r.json()).id);
+  const inp = e.target.closest('button[data-input]');
+  if (inp) {
+    inp.disabled = true;
+    const r = await fetch(`/api/sessions/${sid}/inputs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: inp.dataset.input }) });
+    if (!r.ok) { inp.disabled = false; handlers.error({ text: r.status === 409 ? 'Wait until MixPilot has finished, then try again.' : (await r.json()).detail }); }
   }
   if (e.target.id === 'train') {
     e.target.disabled = true; e.target.textContent = 'Training…';

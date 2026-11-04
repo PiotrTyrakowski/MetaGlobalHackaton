@@ -1,6 +1,6 @@
-"""Run one demo conversation in-process and print the event stream compactly.
+"""Run one conversation on the demo files with Muse Spark, in-process, and print the event stream compactly.
 
-MIXPILOT_LLM=scripted for the stand-in, unset for Muse Spark. --train also runs AutoML (~3 min).
+--train also runs AutoML (~3 min).
 """
 
 import json
@@ -13,8 +13,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from mixpilot import tools  # noqa: E402
 from mixpilot.agent import Agent, training_message, upload_message  # noqa: E402
-from mixpilot.server import DEMO_FILES  # noqa: E402
-from mixpilot.session import new_session  # noqa: E402
+from mixpilot.session import BACKEND, new_session  # noqa: E402
+
+DEMO_FILES = [BACKEND / "data" / "demo" / f for f in ("mix_designs.xlsx", "cylinder_breaks.xlsx", "daily_QC.xlsx")]
 
 s = new_session()
 s.uploads.mkdir(parents=True, exist_ok=True)

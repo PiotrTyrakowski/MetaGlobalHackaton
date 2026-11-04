@@ -62,6 +62,7 @@ def _data_artifact(s: Session, df: pd.DataFrame, report: dict) -> None:
     sources = s.mapping["fields"] | s.mapping.get("extra_inputs", {})
     for r in rows:
         r["status"] = "new" if r["input"] in s.accepted else "incomplete" if r["input"] in s.tested else None
+        r["typical"] = round(float(df[r["input"]].median()), 2) if r["status"] and r["mixes_with_value"] < r["mixes"] else None
         src = sources.get(r["input"])
         r["source"] = src and {"file": src["file"], "column": src["column"]}
     strength, age = s.mapping["fields"]["Strength"], s.mapping["fields"]["Time"]
@@ -199,7 +200,23 @@ def test_input(s: Session, name: str, file: str, column: str) -> dict:
     s.emit("card", kind="input_incomplete", **card)
     _data_artifact(s, df, report)
     return {**card, "used_in_training": False,
-            "note": "errors are 28-day RMSE in psi, measured only on the mixes that record this input"}
+            "note": ("errors are 28-day RMSE in psi, measured only on the mixes that record this input; gain is how "
+                     "much smaller the error got. Ask the user whether to use it; the card has a button, or call "
+                     "use_input if they agree in chat")}
+
+
+def use_input(s: Session, name: str) -> dict:
+    """Train with an input test_input measured; mixes without it get the plant's typical value."""
+    if name not in s.tested:
+        raise ToolError(f"{name!r} has not been tested; tested inputs are {sorted(s.tested)}")
+    if name not in s.accepted:
+        s.accepted.append(name)
+    s.ready_to_train = True
+    df, report = _rebuild(s)
+    s.emit("input_used", input=name)
+    _data_artifact(s, df, report)
+    return {"input": name, "used_in_training": True, "inputs": s.accepted,
+            "note": "mixes without a value get the median of the mixes that have it"}
 
 
 def propose_mixes(s: Session, fixed: dict | None = None, model: str | None = None) -> dict:
@@ -289,12 +306,12 @@ def list_models(s: Session) -> dict:
 def offer_training(s: Session) -> None:
     """Show the Train button after a turn that left prepared, untrained data."""
     if s.mapping is not None and s.ready_to_train:
-        s.emit("train_button", inputs=s.accepted, setups=18 if s.accepted else 9)
+        s.emit("train_button", inputs=s.accepted, setups=automl.n_setups(s.accepted))
 
 
 def train(s: Session) -> dict:
     """AutoML over setups, then fit and save the winner. Runs when the user clicks Train."""
-    total = 18 if s.accepted else 9
+    total = automl.n_setups(s.accepted)
     done = []
 
     def progress():
@@ -317,8 +334,9 @@ def train(s: Session) -> dict:
 
     rows = [{"row": r["row"], "rmse_28d": r["rmse_28d"], "settings": r["settings"], "extra_inputs": r["extra"],
              "chosen": is_best(r)} for r in res["summary"]]
+    d28 = pd.read_csv(s.dataset).query("Time == 28")["Strength (Mean)"]
     s.emit("artifact", name="training", data={
-        "status": "done", "total": total, "rows": rows, "gain": res["gain"],
+        "status": "done", "total": total, "rows": rows, "gain": res["gain"], "typical_28d_psi": round(float(d28.median())),
         "baseline_rmse_28d": res["baseline"]["rmse_28d"], "best_rmse_28d": res["best"]["rmse_28d"],
         "model": entry,
     })
@@ -332,6 +350,7 @@ TOOLS = {
     "prepare_data": prepare_data,
     "add_input": add_input,
     "test_input": test_input,
+    "use_input": use_input,
     "propose_mixes": propose_mixes,
     "predict_strength": predict_strength,
     "list_models": list_models,
@@ -342,6 +361,7 @@ LABELS = {
     "prepare_data": "Building the dataset",
     "add_input": "Adding input",
     "test_input": "Testing input",
+    "use_input": "Adding input",
     "propose_mixes": "Screening new mixes",
     "predict_strength": "Predicting strength",
     "list_models": "Looking up models",
@@ -353,7 +373,7 @@ _INPUT_ARGS = {
     "type": "object",
     "properties": {
         "name": {"type": "string", "description": ("short plain-language name with unit in brackets, "
-                                                    "e.g. 'Air (%)' or 'Site water (gal/yd3)', not the column header")},
+                                                    "e.g. 'Fiber (lb/yd3)', not the column header")},
         **_SOURCE,
     },
     "required": ["name", "file", "column"],
@@ -394,14 +414,19 @@ SCHEMAS = [
      "parameters": _INPUT_ARGS},
     {"type": "function", "name": "test_input",
      "description": ("For an input recorded for only part of the mixes: measure how much it improves the model on "
-                     "the mixes that have it (two cross-validated fits, about 20 s). It is not used for training. "
-                     "Shows the user a card."),
+                     "the mixes that have it (two cross-validated fits, about 20 s). It is not used for training "
+                     "unless the user agrees. Shows the user a card with a button to use it."),
      "parameters": _INPUT_ARGS},
+    {"type": "function", "name": "use_input",
+     "description": ("Use an input that test_input measured in training, after the user agreed. Mixes without a "
+                     "value get the plant's typical value."),
+     "parameters": {"type": "object", "properties": {"name": {"type": "string", "description": "name given to test_input"}},
+                    "required": ["name"]}},
     {"type": "function", "name": "propose_mixes",
      "description": ("With a trained model: screen candidate mixes and return ones predicted to reach the plant's "
                      "usual strength classes with less CO2 than its existing mixes. Updates the Results panel."),
      "parameters": {"type": "object", "properties": {
-         "fixed": {"type": "object", "description": "values held fixed for extra inputs, e.g. {\"Air (%)\": 6}",
+         "fixed": {"type": "object", "description": "values held fixed for extra inputs, e.g. {\"Fiber (lb/yd3)\": 5}; default the plant's typical value",
                    "additionalProperties": {"type": "number"}},
          "model": {"type": "string", "description": "model version; default the latest"}}}},
     {"type": "function", "name": "predict_strength",

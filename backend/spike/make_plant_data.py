@@ -1,9 +1,10 @@
 """Generate a synthetic ready-mix plant's lab history in BOxCrete's CSV format.
 
 "True" strength = Meta's pretrained BOxCrete curve for the composition
-x air penalty x site-water penalty, then three noisy cylinders per test
-age. Air content is recorded for every mix; water added on site (by the
-truck driver) for ~40% of them.
+x air penalty x site-water penalty x an unexplained batch factor (materials,
+batching), then three noisy cylinders per test age. Air content is recorded
+for every mix; water added on site (by the truck driver) only for the newest
+60%, since the plant started logging it partway through.
 """
 
 import sys
@@ -14,12 +15,14 @@ import torch
 
 from boxcrete import load_pretrained_strength_gp
 
-N_MIXES = 46
+N_MIXES = 70
 AGES = [3, 7, 28]
 SOURCE = 2  # Meta's ready-mix-like material set
-AIR_PENALTY = 0.05  # ~5% strength lost per 1% air above 2%
+AIR_PENALTY = 0.035  # ~3.5% strength lost per 1% air above 2% (net of the water air-entrained mixes save)
 WATER_PENALTY = 0.06  # ~6% strength (~300 psi) lost per gal/yd3 of water added on site
+BATCH_CV = 0.05  # batch-to-batch scatter nobody records, shared by a mix's ages
 CYL_CV = 0.035  # cylinder-to-cylinder scatter
+WATER_LOGGED_FROM = 0.4  # site water is logged from this share of the mixes on
 
 rng = np.random.default_rng(int(sys.argv[1]) if len(sys.argv) > 1 else 0)
 
@@ -40,7 +43,7 @@ for i in range(N_MIXES):
             cement=cement, fly_ash=fly_ash, slag=slag, water=wb * binder, hrwr=hrwr,
             fine=rng.uniform(740, 900), coarse=rng.uniform(1050, 1150),
             temp=rng.normal(22.5, 0.8), air=air, site_water=max(0.0, rng.uniform(-0.5, 3.0)),
-            has_water=rng.random() < 0.4,
+            has_water=i >= WATER_LOGGED_FROM * N_MIXES,
         )
     )
 
@@ -56,6 +59,7 @@ for r in rows:
     with torch.no_grad():
         meta = model.posterior(X).mean.squeeze(-1).numpy() * float(model._study_y_std)
     factor = (1 - AIR_PENALTY * (r["air"] - 2.0)) * (1 - WATER_PENALTY * r["site_water"])
+    factor *= 1 + BATCH_CV * rng.standard_normal()
     for t, s in zip(AGES, meta * factor):
         cyl = s * (1 + CYL_CV * rng.standard_normal(3))
         out.append(

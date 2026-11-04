@@ -55,6 +55,7 @@ import torch  # noqa: E402
 from boxcrete import fit_strength_gp, load_concrete_strength  # noqa: E402
 from boxcrete.block_loo import train_block_loo  # noqa: E402
 from boxcrete.utils import DEFAULT_BOUNDS_DICT, DEFAULT_X_COLUMNS  # noqa: E402
+from linear_operator.utils.errors import NotPSDError  # noqa: E402
 
 
 def bounds_dict(df: pd.DataFrame) -> dict:
@@ -67,12 +68,26 @@ def bounds_dict(df: pd.DataFrame) -> dict:
     return b
 
 
+def fill_missing(df: pd.DataFrame, values: dict | None = None) -> tuple[pd.DataFrame, dict]:
+    """Extra inputs older mixes lack get the typical (median) value of the mixes that have it."""
+    values = values or {c: float(df[c].median()) for c in args.extra}
+    return df.fillna({c: v for c, v in values.items() if c in df}), values
+
+
 def fit(df: pd.DataFrame, bounds: dict, max_iter: int = 150):
     data = load_concrete_strength(df.reset_index(drop=True), bounds_dict=bounds)
     X, Y, Yvar, X_bounds = data.strength_data
     model = fit_strength_gp(X=X, Y=Y, Yvar=Yvar, X_bounds=X_bounds, seed=0, max_optimizer_iter=0)
     if max_iter:
-        train_block_loo(model, X.shape[0], mll_weight=args.mll, max_iter=max_iter, lr=0.1)
+        start = {k: v.clone() for k, v in model.state_dict().items()}
+        for lr in (0.1, 0.03, 0.01):
+            try:
+                train_block_loo(model, X.shape[0], mll_weight=args.mll, max_iter=max_iter, lr=lr)
+                break
+            except NotPSDError:  # LBFGS stepped where the covariance breaks down; retry with smaller steps
+                model.load_state_dict(start)
+        else:
+            raise RuntimeError("training did not converge")
     model.eval()
     return model
 
@@ -98,8 +113,9 @@ if args.job == "cv":
     fold = df["Mix Name"].map(fold_of)
     pred = np.zeros(len(df))
     for k in range(args.folds):
-        model = fit(df[fold != k], bounds)
-        pred[(fold == k).to_numpy()] = predict(model, df[fold == k])[0]
+        train, typical = fill_missing(df[fold != k])
+        model = fit(train, bounds)
+        pred[(fold == k).to_numpy()] = predict(model, fill_missing(df[fold == k], typical)[0])[0]
     err = pred - df["Strength (Mean)"].to_numpy()
     age = df["Time"].to_numpy()
     result = {
@@ -110,15 +126,16 @@ if args.job == "cv":
     }
 
 elif args.job == "fit":
-    df = pd.read_csv(args.data)
+    df, typical = fill_missing(pd.read_csv(args.data))
     bounds = bounds_dict(df)
     model = fit(df, bounds)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), out / "model.pt")
     df.to_csv(out / "data.csv", index=False)
-    (out / "config.json").write_text(json.dumps({**settings, "bounds": bounds, "inputs": DEFAULT_X_COLUMNS}, indent=1))
-    result = {**settings, "path": str(out), "mixes": int(df["Mix Name"].nunique())}
+    (out / "config.json").write_text(json.dumps({**settings, "bounds": bounds, "inputs": DEFAULT_X_COLUMNS,
+                                                 "typical": typical}, indent=1))
+    result = {**settings, "path": str(out), "mixes": int(df["Mix Name"].nunique()), "typical": typical}
 
 else:
     df = pd.read_csv(args.data)
@@ -127,7 +144,7 @@ else:
     model.eval()
     if args.job == "predict":
         rows = pd.DataFrame(json.loads(Path(args.rows).read_text()))
-        mean, sd = predict(model, rows)
+        mean, sd = predict(model, fill_missing(rows, cfg.get("typical"))[0])
         result = {"predictions": [{"mean_psi": round(float(m)), "sd_psi": round(float(s))} for m, s in zip(mean, sd)]}
     else:
         from mixpilot.propose import propose

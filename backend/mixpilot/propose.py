@@ -4,8 +4,9 @@ Candidates are sampled inside the plant's own experience (binder content,
 w/b and SCM share it already uses), with aggregates, curing temperature and
 any extra inputs held at the plant's typical values. The model predicts
 28-day strength; GWP comes from per-material factors. We keep the
-CO2-vs-strength Pareto front and pick mixes that match the strength of
-the plant's existing mixes.
+Pareto front of CO2 vs the strength the model is confident of (prediction
+minus one SD) and pick mixes that match the strength of the plant's
+existing mixes.
 """
 
 from collections.abc import Callable
@@ -66,7 +67,9 @@ def propose(
 
     mean, sd = predict(cand)
     cand["pred"], cand["sd"], cand["gwp"] = mean, sd, gwp(cand)
-    front = cand.iloc[pareto(cand["gwp"].to_numpy(), cand["pred"].to_numpy())]
+    # Rank by prediction minus one SD, so an optimistic but uncertain prediction
+    # can't push out a cleaner mix the model is sure of.
+    front = cand.iloc[pareto(cand["gwp"].to_numpy(), (cand["pred"] - cand["sd"]).to_numpy())]
 
     existing = data[data["Time"] == 28].copy()
     existing["gwp"] = gwp(existing)
@@ -106,6 +109,5 @@ def propose(
     return {
         "compared_with": int(len(existing)),
         "existing": [{"mix": r["Mix Name"], "gwp": round(float(r["gwp"]), 1), "psi": int(r["Strength (Mean)"])} for _, r in existing.iterrows()],
-        "front": [{"gwp": round(float(r["gwp"]), 1), "psi": round(float(r["pred"]))} for _, r in front.iterrows()],
         "proposals": proposals,
     }

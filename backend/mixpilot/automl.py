@@ -47,9 +47,13 @@ def label(setup: dict) -> str:
     return " ".join(parts)
 
 
+def n_setups(extra_inputs: list[str]) -> int:
+    return len(GRID["gate_tau"]) * len(GRID["mll_weight"]) * (1 + len(extra_inputs))
+
+
 def search(data: str | Path, extra_inputs: list[str], on_result: Callable[[dict], None] | None = None) -> dict:
-    """Grid over input sets (base, base + all accepted extras) x tuning settings."""
-    input_sets = [[], list(extra_inputs)] if extra_inputs else [[]]
+    """Grid over input sets (base, then each accepted extra added in turn) x tuning settings."""
+    input_sets = [list(extra_inputs[:k]) for k in range(len(extra_inputs) + 1)]
     setups = []
     for extra in input_sets:
         for tau, mll in itertools.product(GRID["gate_tau"], GRID["mll_weight"]):
@@ -73,14 +77,9 @@ def search(data: str | Path, extra_inputs: list[str], on_result: Callable[[dict]
         pool = [r for r in results if r["extra"] == extra and (tuned or r["settings"] == DEFAULT)]
         return min(pool, key=lambda r: r["rmse_28d"]) if pool else None
 
-    summary = [baseline, best_of([], True)]
-    if extra_inputs:
-        summary += [best_of(list(extra_inputs), False), best_of(list(extra_inputs), True)]
-    summary = [dict(r, row=name) for r, name in zip(summary, [
-        "Meta's default setup", "+ tuned settings",
-        f"+ {', '.join(e.split(' (')[0].lower() for e in extra_inputs)}",
-        f"+ tuned settings + {', '.join(e.split(' (')[0].lower() for e in extra_inputs)}",
-    ])]
+    # Each row adds one thing to the row above, with its best settings
+    summary = [dict(baseline, row="Meta's default setup"), dict(best_of([], True), row="+ tuned settings")]
+    summary += [dict(best_of(s, True), row=f"+ {s[-1].split(' (')[0].lower()}") for s in input_sets[1:]]
     return {
         "baseline": baseline,
         "best": best,

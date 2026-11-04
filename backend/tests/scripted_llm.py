@@ -1,8 +1,8 @@
-"""A stand-in for Muse Spark that replays the demo flow, for UI work without an API key.
+"""A stand-in for Muse Spark in the offline agent test (no API key, no network).
 
-Enable with MIXPILOT_LLM=scripted. It makes the same tool calls the real
-agent should make on the demo files and fills its replies from the tool
-results. The demo video uses the real model.
+It makes the tool calls the real agent should make when the demo files are
+uploaded, so the test checks the tools and events, not the model. The app
+itself always runs Muse Spark.
 """
 
 import json
@@ -44,7 +44,7 @@ class ScriptedLLM:
             batch = [self.plan.pop(0)]
             self._last = batch
             return Step("scripted_" + uuid.uuid4().hex[:8], "", batch)
-        text = self.reply() if self.reply else "I'm running in scripted mode, so I can only replay the demo."
+        text = self.reply() if self.reply else "Done."
         self.reply = None
         for word in text.split(" "):
             on_text(word + " ")
@@ -60,10 +60,6 @@ class ScriptedLLM:
                            column="Water Added on Site (gal/yd³)"),
             ]
             self.reply = self._prep_reply
-        elif text.startswith("[app] Training finished"):
-            self.results["train"] = json.loads(text.split(" ", 3)[3])
-            self.plan = [self._call("propose_mixes", fixed={"Air (%)": 6})]
-            self.reply = self._results_reply
 
     def _prep_reply(self) -> str:
         rep = self.results["prepare_data"]["report"]
@@ -71,17 +67,5 @@ class ScriptedLLM:
         return (f"Your three files give {rep['mixes']} mixes with {rep['cylinders_used']} usable cylinders. "
                 f"Air content is recorded for every mix, so I added it as a new input. "
                 f"Water added on site is logged for only {t['mixes_with_value']} of {t['mixes']} mixes; on those it cuts the "
-                f"28-day error from {t['rmse_28d_without']} to {t['rmse_28d_with']} psi, so it's worth logging for every truck.")
+                f"28-day error from {t['rmse_28d_without']} to {t['rmse_28d_with']} psi. Use it in training?")
 
-    def _results_reply(self) -> str:
-        tr = self.results["train"]
-        board = tr["leaderboard"]
-        best = next(r for r in board if r["chosen"])
-        props = self.results["propose_mixes"]["proposals"]
-        top = max(props, key=lambda p: p["co2_saving"]) if props else None
-        text = (f"The new setup cuts the 28-day error from {board[0]['rmse_28d']} to {best['rmse_28d']} psi "
-                f"({tr['gain_vs_meta_default']:.0%} better than Meta's default) and is saved as {tr['saved_model']['version']}.")
-        if top:
-            text += (f" At 6% air it finds a {top['target_psi']} psi mix with {top['co2_saving']:.0%} less CO2 "
-                     f"than {top['compare_to']}.")
-        return text

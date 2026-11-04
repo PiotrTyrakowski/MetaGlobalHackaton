@@ -3,7 +3,7 @@
 Each file looks like something a US ready-mix plant keeps: imperial units,
 its own column names, a title row, inconsistent mix IDs, one row per
 cylinder, a few failed cylinders, breaks past 28 days, and a QC log where
-water added on site is only filled in for some trucks.
+water added on site is only filled in since the plant started logging it.
 """
 
 import sys
@@ -51,7 +51,7 @@ designs = pd.DataFrame(
     }
 )
 with pd.ExcelWriter(out_dir / "mix_designs.xlsx") as xw:
-    pd.DataFrame([["Riverside Ready-Mix: approved mix designs (2025)"], [""]]).to_excel(
+    pd.DataFrame([["Approved mix designs (2025)"], [""]]).to_excel(
         xw, sheet_name="Mix Designs", header=False, index=False
     )
     designs.to_excel(xw, sheet_name="Mix Designs", startrow=2, index=False)
@@ -59,8 +59,9 @@ with pd.ExcelWriter(out_dir / "mix_designs.xlsx") as xw:
 # --- cylinder_breaks.xlsx: one row per cylinder ---
 rows = []
 cast = pd.Timestamp("2025-01-06")
+step = 600 // len(mixes)  # days between mixes: about 20 months of history
 for i, r in truth.iterrows():
-    cast_date = cast + pd.Timedelta(days=(int(r["Mix Name"][1:]) - 101) * 13)
+    cast_date = cast + pd.Timedelta(days=(int(r["Mix Name"][1:]) - 101) * step)
     for j, col in enumerate(["Strength1 (psi)", "Strength2 (psi)", "Strength3 (psi)"]):
         rows.append(
             {
@@ -105,7 +106,7 @@ for _, r in mixes.iterrows():
     air_dev -= air_dev.mean()
     temp_dev = rng.normal(0, 0.5, n)
     temp_dev -= temp_dev.mean()
-    date = cast + pd.Timedelta(days=(int(r["Mix Name"][1:]) - 101) * 13)
+    date = cast + pd.Timedelta(days=(int(r["Mix Name"][1:]) - 101) * step)
     raw_id = r["Mix Name"][1:]
     mix_id = rng.choice([f"R{raw_id}", f"r-{raw_id}", f"R {raw_id}"])
     has_water = not pd.isna(r["Site Water (gal/yd3)"])

@@ -2,11 +2,11 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "mixpilot-scripted",
+      "name": "mixpilot-8001",
       "runtimeExecutable": "sh",
       "runtimeArgs": [
         "-c",
-        "cd backend && MIXPILOT_LLM=scripted PYTHONPATH=. exec uv run uvicorn mixpilot.server:app --port 8001"
+        "cd backend && PYTHONPATH=. exec uv run uvicorn mixpilot.server:app --port 8001"
       ],
       "port": 8001
     },

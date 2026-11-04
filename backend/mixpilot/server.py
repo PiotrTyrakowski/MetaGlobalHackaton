@@ -5,7 +5,6 @@ Run from backend/:  uv run uvicorn mixpilot.server:app --port 8000
 
 import asyncio
 import json
-import shutil
 import threading
 
 from fastapi import FastAPI, HTTPException, Request, UploadFile
@@ -18,8 +17,6 @@ from mixpilot import tools
 from mixpilot.agent import Agent, training_message, upload_message
 from mixpilot.session import BACKEND, SESSIONS, Session, new_session
 
-DEMO_FILES = [BACKEND / "data" / "demo" / f for f in ("mix_designs.xlsx", "cylinder_breaks.xlsx", "daily_QC.xlsx")]
-
 app = FastAPI(title="MixPilot")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
                    allow_methods=["*"], allow_headers=["*"])
@@ -31,6 +28,10 @@ class NewSession(BaseModel):
 
 class Message(BaseModel):
     text: str
+
+
+class InputName(BaseModel):
+    name: str
 
 
 def _session(sid: str) -> Session:
@@ -69,18 +70,6 @@ def create_session(body: NewSession | None = None):
     return {"id": s.id, "model": s.model}
 
 
-@app.post("/api/sessions/demo")
-def create_demo_session():
-    """A session preloaded with the three synthetic demo files."""
-    s = new_session()
-    s.uploads.mkdir(parents=True, exist_ok=True)
-    for f in DEMO_FILES:
-        shutil.copy(f, s.uploads / f.name)
-        s.files.append(s.uploads / f.name)
-    _after_upload(s, [f.name for f in DEMO_FILES])
-    return {"id": s.id}
-
-
 @app.post("/api/sessions/{sid}/files")
 async def upload(sid: str, files: list[UploadFile]):
     s = _session(sid)
@@ -104,6 +93,20 @@ def post_message(sid: str, body: Message):
     s.emit("message", role="user", text=body.text)
     _start(s, "agent", lambda: Agent(s).run(body.text))
     return {"ok": True}
+
+
+@app.post("/api/sessions/{sid}/inputs")
+def use_input(sid: str, body: InputName):
+    """The card's "Use it" button: train with a partly recorded input."""
+    s = _session(sid)
+    if s.busy:
+        raise HTTPException(409, f"busy: {s.busy}")
+    try:
+        tools.use_input(s, body.name)
+    except tools.ToolError as e:
+        raise HTTPException(400, str(e))
+    tools.offer_training(s)
+    return {"inputs": s.accepted}
 
 
 @app.post("/api/sessions/{sid}/train")
