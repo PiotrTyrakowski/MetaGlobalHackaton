@@ -40,14 +40,19 @@ def _prep(s: Session, **found) -> None:
     s.emit("artifact", name="prep", data={**s.artifacts.get("prep", {}), **found})
 
 
-def map_columns(s: Session, mapping: dict) -> dict:
+def map_columns(s: Session, mapping: dict, column_notes: dict | None = None) -> dict:
     """Apply the agent's mapping; on failure return the errors so it can fix them."""
+    if column_notes:
+        # read_files names columns 'file / sheet / column', and the agent may key its notes the same way
+        s.column_notes = {str(c).rsplit(" / ", 1)[-1]: str(n).strip() for c, n in column_notes.items() if n}
+    age_columns = list((mapping.get("tests") or {}).get("age_columns") or {})
     try:
         sheets, mapping = dataset.prepare(s.sheets, mapping)
         ds, report = dataset.build(sheets, mapping)
         dataset.check_enough(ds)
     except MappingError as e:
         return dict(ok=False, errors=e.errors)
+    report["age_columns"] = age_columns
     s.mapping, s.data, s.map_report = mapping, ds, report
     s.validation = s.suggestions = None
     s.accepted, s.offered, s.ready_to_train = [], {}, False
@@ -106,6 +111,7 @@ def suggest_inputs(s: Session) -> dict:
     for c, r in s.offered.items():
         s.emit("card", kind="input_incomplete", input=c, file=s.data.candidates[c].file, **_counts(s, c),
                why=_why_partial(r, "On those batches it"), recorded_from=r.get("recorded_from"), timeline=_timeline(s, c))
+    _prep(s, columns=_columns(s))
     _data_artifact(s)
     return dict(added=s.accepted, offered=list(s.offered), columns=found["columns"], method=found["method"],
                 note="'added' inputs will be used in training. Recipe ingredients among them have no test result "
@@ -195,20 +201,69 @@ def _tested(s: Session) -> list[dict] | None:
         elif verdict == "collect":
             status = "added" if c in s.accepted else "partly logged"
             why = _why_partial(r, "On the batches that have it, it")
-        elif verdict == "proxy":
-            status, why = "not used", "Linked to strength, but it's a label or date, not a measurement."
-            if r.get("associated_with"):
-                why += f" It stands in for {r['associated_with'][0]['column']}."
-        elif r.get("restates_result"):
-            status, why = "not used", "It repeats the strength test results, so it's an outcome, not an input."
-        elif verdict == "reject" and r["level"] == "batch":
-            status, why = "not used", "No clear link to strength between batches of the same mix."
-        elif verdict == "reject":
-            status, why = "not used", "Didn't improve predictions on mixes the model never saw."
         else:
-            status, why = "not used", "A label, not a quantity, so it can't go in the model."
+            status, why = "not used", _why_unused(r)
         out.append(dict(column=c, file=s.data.candidates[c].file, status=status, why=why))
     return out
+
+
+def _why_unused(r: dict) -> str:
+    if r["verdict"] == "proxy":
+        why = "Linked to strength, but it's a label or date, not a measurement."
+        if r.get("associated_with"):
+            why += f" It stands in for {r['associated_with'][0]['column']}."
+        return why
+    if r.get("restates_result"):
+        return "It repeats the strength test results, so it's an outcome, not an input."
+    if r["verdict"] == "reject" and r["level"] == "batch":
+        return "No clear link to strength between batches of the same mix."
+    if r["verdict"] == "reject":
+        return "Didn't improve predictions on mixes the model never saw."
+    return "A label, not a quantity, so it can't go in the model."
+
+
+def _why_useful(r: dict) -> str:
+    """What the data shows about a column before any training."""
+    if r["level"] != "batch":
+        return "BOxCrete has no input for it. Training tests whether it helps."
+    return _why_partial(r, "On the batches that have it, it") if r["verdict"] == "collect" else _why(r)
+
+
+def _why_set_aside(s: Session, c: str) -> str:
+    """Why a column never became a candidate at all."""
+    m, report = s.mapping, s.map_report
+    sections = [m.get(k) or {} for k in ("recipes", "batches", "tests")]
+    if c in {sec.get(k) for sec in sections for k in ("key", "batch_key", "recipe_key")}:
+        return "An ID that links the files, not an input."
+    tests = m.get("tests") or {}
+    if any(rule["column"] == c for rule in tests.get("exclude", [])):
+        return "Notes, used only to drop bad cylinders."
+    if f"{c} (empty)" in report.get("skipped_columns", []):
+        return "Empty in your file."
+    if f"{c} (text)" in report.get("skipped_columns", []):
+        return "Free text, not a quantity."
+    if c in m.get("ignore", []):
+        return "Muse Spark set it aside."
+    if any(sh.file == tests.get("file") and c in sh.df.columns for sh in s.sheets):
+        return "Recorded per cylinder, not per mix."
+    return "Not a quantity the model can use."
+
+
+def _columns(s: Session) -> dict:
+    """Every column in the files by what it's for. Written before training, which never rewrites it."""
+    rows, notes = s.suggestions["columns"], s.column_notes
+    mapped = _mapped(s.mapping, s.map_report)
+    useful = [r for r in rows if r["verdict"] in ("use", "collect")]
+    unused = [dict(column=r["column"], note=notes.get(r["column"]), why=_why_unused(r))
+              for r in rows if r["verdict"] not in ("use", "collect")]
+    seen = {r["column"] for r in [*rows, *mapped]} | set(s.map_report.get("age_columns", []))
+    for sheet in s.sheets:
+        for c in map(str, sheet.df.columns):
+            if c not in seen:
+                seen.add(c)
+                unused.append(dict(column=c, note=notes.get(c), why=_why_set_aside(s, c)))
+    return dict(default=mapped, unused=unused,
+                useful=[dict(column=r["column"], note=notes.get(r["column"]), why=_why_useful(r)) for r in useful])
 
 
 UNIT_NAMES = {"lb/yd3": "lb/yd³", "gal/yd3": "gal/yd³", "fl_oz/cwt": "fl oz/cwt", "F": "°F", "MPa": "MPa", "ksi": "ksi",
@@ -333,7 +388,7 @@ def train(s: Session, n_bayes: int = 10, use_cache: bool = True) -> dict:
                    chosen=r["best"], baseline=r["baseline"], folds=r["folds_won_vs_baseline"],
                    folds_vs_meta=r.get("folds_won_vs_meta_settings")) for r in board],
         model=dict(version=s.model, mixes=s.model_meta["recipes"]), left_out=left_out,
-        search=_search(s.training["trials"]),
+        others=_others(s.training["trials"], board),
     ))
     s.emit("models_updated", model=s.model)
     return dict(ok=True, more_accurate_than_baseline_percent=round(100 * gain), tuning_helped=s.training["tuning_helped"],
@@ -376,12 +431,23 @@ def _search_round(n: int, source: str, base: float | None, plus: float | None) -
     return dict(round=n, kind=SEARCH_KINDS.get(source, source), base=psi(base), plus=psi(plus))
 
 
-def _search(trials: list[dict]) -> list[dict]:
-    """The same rounds from a finished run, whose trials alternate between the input sets."""
-    base = [t for t in trials if t["setup"] == BASE_SETUP]
-    plus = [t for t in trials if t["setup"] != BASE_SETUP] or [{}] * len(base)
-    return [_search_round(i + 1, b["source"], b["error_28d_psi"], p.get("error_28d_psi"))
-            for i, (b, p) in enumerate(zip(base, plus))]
+def _same_model(trial: dict, row: dict) -> bool:
+    """A try and a leaderboard row are one model if they have the same input set and settings."""
+    return (trial["setup"] == BASE_SETUP) == (not row["inputs"]) and all(trial.get(k) == v for k, v in row["settings"].items())
+
+
+def _others(trials: list[dict], board: list[dict]) -> list[dict]:
+    """The models that didn't reach the re-check, best first. The search can land on the same settings twice: one model."""
+    keys = list(board[0]["settings"])
+    seen, out = set(), []
+    for i, t in enumerate(trials):
+        model = (t["setup"], *(t[k] for k in keys))
+        if t["error_28d_psi"] is None or model in seen or any(_same_model(t, r) for r in board):
+            continue
+        seen.add(model)
+        out.append(dict(model=i + 1, new_inputs=t["setup"] != BASE_SETUP, settings={k: t[k] for k in keys},
+                        error=t["error_28d_psi"]))
+    return [{k: v for k, v in o.items() if k != "error"} for o in sorted(out, key=lambda o: o["error"])]
 
 
 def _run_key(ds: Dataset, extras: list[str], n_bayes: int) -> str:
@@ -534,7 +600,11 @@ SCHEMAS = [
                      "has no mix ID, leave out recipes.key and rows with the same ingredients count as one mix. "
                      f"Fields and allowed units: {json.dumps(_HELP['fields'])}. Required: "
                      f"{_HELP['required']}. Shape (names made up): {json.dumps(_HELP['example'])}",
-         parameters=_schema({"mapping": {"type": "object"}}, ["mapping"])),
+         parameters=_schema({"mapping": {"type": "object"},
+                             "column_notes": {"type": "object", "additionalProperties": {"type": "string"},
+                                              "description": "Column name -> one short plain sentence, for each "
+                                                             "column you did not map: what it holds and why it could "
+                                                             "or couldn't matter for strength."}}, ["mapping"])),
     dict(type="function", name="validate_data",
          description="Check the mapped data: coverage, ranges vs Meta's training data, cleaned cells, rows left "
                      "out, assumptions.",

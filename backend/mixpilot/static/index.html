@@ -56,9 +56,7 @@ svg{display:block}
 .ph[aria-disabled=true]{cursor:default}
 .ph .g{flex:none;width:26px;height:26px}
 .ph .nm{display:block;font-weight:550;letter-spacing:-.012em;line-height:17px;font-size:14px}
-.ph .sb{display:block;font-size:12px;color:var(--ink-3);line-height:15px;margin-top:1px;white-space:nowrap}
 .ph.locked .nm{color:var(--ink-3);font-weight:450}
-.ph.waiting .sb{color:var(--you)}
 .ph-t{min-width:0}
 .ln{flex:1;min-width:10px;height:1px;background:var(--line-2)}
 .ln.done{background:var(--ink)}
@@ -67,7 +65,7 @@ svg{display:block}
 .navi.on{background:var(--fill);color:var(--ink)}
 .navi .g{display:grid;place-items:center}
 @media (hover:hover) and (pointer:fine){.navi:hover{background:var(--fill)}}
-@media (max-width:1180px){.ph .sb{display:none}.ph{gap:8px}}
+@media (max-width:1180px){.ph{gap:8px}}
 @media (max-width:860px){.ph:not([aria-current]) .ph-t{display:none}.ph{padding:0 9px}}
 
 /* ------------------------------------------------------------------ stage */
@@ -155,6 +153,9 @@ h2{font-size:18px;font-weight:550;letter-spacing:-.018em}
 .rw.map{grid-template-columns:minmax(0,1.2fr) 16px minmax(0,1fr) 124px}
 .rw.map>:last-child{text-align:right}
 .rw.file{grid-template-columns:minmax(0,1fr) auto}
+.rw.def{grid-template-columns:minmax(0,1.2fr) 16px minmax(0,1fr)}
+.rw.col{grid-template-columns:minmax(0,190px) minmax(0,1fr)}
+.rows.cols-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:28px}
 .rw.test{grid-template-columns:minmax(0,190px) 96px minmax(0,1fr)}
 .rw .tag{justify-self:start}
 .rw .arr{color:var(--ink-3)}
@@ -172,28 +173,26 @@ h2{font-size:18px;font-weight:550;letter-spacing:-.018em}
 .sub-cap{font-size:12px;color:var(--ink-3);margin:0 0 6px}
 
 /* ------------------------------------------------------------------ review */
-.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px}
-.stat b{display:block;font-size:30px;font-weight:500;letter-spacing:-.035em;line-height:1.1}
-.stat span{display:block;margin-top:5px;font-size:12.5px;color:var(--ink-3)}
-.decide{margin-top:36px;padding:26px 28px;border-radius:20px;background:var(--raise);box-shadow:0 0 0 1px var(--you),0 0 0 5px var(--you-soft)}
-.decide.settled{box-shadow:0 0 0 1px var(--line);padding:18px 22px}
-.decide-top{display:flex;align-items:center;gap:8px;margin-bottom:10px}
-.decide h2{font-size:22px;letter-spacing:-.028em}
-.decide p{margin-top:6px;color:var(--ink-2);max-width:600px;text-wrap:pretty}
-.strip{display:flex;gap:2px;height:36px;margin-top:22px;align-items:stretch}
+.hd.tight{margin-bottom:12px}
+.hd.tight h1{font-size:40px}
+.hd.tight .lede{margin-top:8px;max-width:none}
+.sec.tight{margin-top:20px}
+.facts{font-size:13.5px;line-height:1.5;color:var(--ink-2);text-wrap:pretty}
+.facts b{font-weight:550;color:var(--ink)}
+.view:has(.hd.tight){padding-top:24px;padding-bottom:24px}
+body.chat-off .view:has(.hd.tight){padding-bottom:72px}
+.view:has(.hd.tight) .disc{margin-top:10px}
+.view:has(.hd.tight) .cta{margin-top:14px}
+.decide{margin-top:14px;padding:16px 20px;border-radius:16px;background:var(--raise);box-shadow:0 0 0 1px var(--you),0 0 0 5px var(--you-soft)}
+.decide-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.decide-b{margin-left:auto;display:flex;gap:8px}
+.decide p{margin-top:8px;font-size:13.5px;color:var(--ink-2);text-wrap:pretty}
+.strip{display:flex;gap:2px;height:16px;margin-top:10px;align-items:stretch}
 .strip i{flex:1;min-width:1px;border-radius:1.5px;background:var(--fill-2)}
 .strip i.has{background:var(--ink)}
 .strip-k{display:flex;justify-content:space-between;margin-top:7px;font-size:12px;color:var(--ink-3);position:relative;height:17px}
 .strip-k em{position:absolute;font-style:normal;color:var(--ink);font-weight:500;transform:none}
-.decide-ft{display:flex;align-items:center;gap:10px;margin-top:22px;flex-wrap:wrap}
-.decide-ft .mt{margin-left:auto;font-size:13px;color:var(--ink-3);text-align:right}
-.decide-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.decide-row b{font-weight:550}
-.inputs{display:flex;flex-wrap:wrap;gap:6px}
-.chip{display:inline-flex;align-items:center;height:30px;padding:0 11px;border-radius:8px;background:var(--fill);font-size:13px;color:var(--ink-2)}
-.chip.new{background:var(--ink);color:var(--on-ink);font-weight:500}
-.chip.maybe{background:none;box-shadow:inset 0 0 0 1px var(--you);color:var(--ink)}
-.plus{display:flex;align-items:center;gap:10px;margin:14px 0 10px;font-size:12.5px;color:var(--ink-3)}
+.plus{display:flex;align-items:center;gap:10px;margin:12px 0 4px;font-size:12.5px;color:var(--ink-3)}
 .plus::after{content:"";flex:1;height:1px;background:var(--line)}
 .cta{position:sticky;bottom:20px;margin-top:40px;display:flex;align-items:center;gap:16px;padding:12px 12px 12px 22px;border-radius:18px;background:var(--glass);backdrop-filter:blur(20px) saturate(1.4);-webkit-backdrop-filter:blur(20px) saturate(1.4);box-shadow:var(--shadow);z-index:4}
 .cta .t{min-width:0;font-size:13px;color:var(--ink-3);line-height:1.35}
@@ -206,11 +205,7 @@ h2{font-size:18px;font-weight:550;letter-spacing:-.018em}
 .disc[open] summary svg{transform:rotate(180deg)}
 
 /* ------------------------------------------------------------------ train */
-.hero-n{display:flex;align-items:flex-end;gap:40px;flex-wrap:wrap}
-.big{font-size:88px;line-height:.95;font-weight:500;letter-spacing:-.055em}
-.big small{font-size:22px;font-weight:400;letter-spacing:-.02em;color:var(--ink-3);margin-left:6px}
-.big-l{margin-top:12px;font-size:13.5px;color:var(--ink-2);max-width:280px;text-wrap:pretty}
-.rounds{margin-top:36px}
+.rounds{margin-top:0}
 .pills{display:flex;justify-content:space-between;height:44px}
 .pills i{width:14px;border-radius:99px;background:var(--fill-2);transition:background-color 200ms ease}
 .pills i.on{background:var(--ink)}
@@ -224,6 +219,7 @@ h2{font-size:18px;font-weight:550;letter-spacing:-.018em}
 .board .brow:last-child{border-bottom:0}
 .brow .nm{font-weight:450;text-wrap:pretty}
 .brow.win .nm{font-weight:600}
+.board .brow.other{display:block;padding-block:11px}
 .brow small{display:block;font-size:12.5px;color:var(--ink-3);font-weight:400}
 .brow .v{text-align:right;font-weight:500}
 .brow .bar{height:8px;background:var(--fill);border-radius:0 4px 4px 0}
@@ -231,8 +227,6 @@ h2{font-size:18px;font-weight:550;letter-spacing:-.018em}
 .brow.win .bar i{background:var(--good)}
 
 /* ------------------------------------------------------------------ results */
-.pay{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px;margin-top:28px;padding-top:24px;border-top:1px solid var(--line)}
-.pay .stat span{text-wrap:pretty}
 .seg{display:flex;gap:6px;flex-wrap:wrap}
 .seg button{flex:1;min-width:150px;padding:12px 14px;border-radius:12px;text-align:left;box-shadow:inset 0 0 0 1px var(--line);transition:box-shadow 160ms ease,transform 140ms var(--ease)}
 .seg button:active{transform:scale(.985)}
@@ -442,7 +436,7 @@ let chatOpen = true, liveEvent = false, models = [];
 const fresh = () => ({
   live: 'upload', view: 'upload', seen: { upload: true }, pending: [], files: [], uploading: false, busy: null, canTrain: false,
   art: {}, cards: [], decisions: {}, editing: {}, prep: { step: -1, open: -1, note: '', stopped: false }, train: { note: '', failed: false },
-  sel: 0, leftOpen: false, asked: new Set(), unread: false, lastMsg: '', status: '',
+  sel: 0, disc: {}, asked: new Set(), unread: false, lastMsg: '', status: '',
 });
 let S = fresh();
 
@@ -461,32 +455,6 @@ function phaseState(k) {
   if (k === 'train') return trained() ? 'done' : S.train.failed ? 'waiting' : 'running';
   return 'done';
 }
-function phaseSub(k, st) {
-  const T = S.art.training, D = S.art.data;
-  if (k === 'upload') { const n = S.files.length || S.pending.length; return n ? `${n} file${n > 1 ? 's' : ''}` : 'Excel or CSV'; }
-  if (k === 'prepare') {
-    if (st === 'locked') return 'Clean and test';
-    if (st === 'waiting') return 'Stopped, see chat';
-    if (st === 'running') return S.prep.step >= 0 ? STEPS[Math.min(S.prep.step, 3)].short : 'Starting';
-    return D ? `${D.mixes} mixes · ${D.batches} batches` : 'Done';
-  }
-  if (k === 'review') {
-    if (st === 'locked') return 'Your decisions';
-    const n = undecided().length;
-    if (st === 'waiting') return `${n} decision${n > 1 ? 's' : ''} for you`;
-    const added = D ? D.coverage.filter(r => r.status === 'new').length : 0;
-    return added ? `${added} new input${added > 1 ? 's' : ''}` : "Meta's 10 inputs";
-  }
-  if (k === 'train') {
-    if (st === 'locked') return 'Compare setups';
-    if (st === 'waiting') return 'Stopped, see chat';
-    if (st === 'running') return !T ? 'Starting' : T.done >= T.total ? 'Saving the model' : `Round ${T.done + 1} of ${T.total}`;
-    return T?.gain > 0 ? `${pct(T.gain)} more accurate` : 'Compared setups';
-  }
-  if (st === 'locked' || !S.art.results) return 'Mixes to test next';
-  const best = bestSaving();
-  return best ? `Up to ${pct(best)} less CO₂` : `Model ${esc(S.art.results.model)}`;
-}
 function glyph(k, st, n) {
   const R = 11.5, C = 2 * Math.PI * R;
   const num = (c, w = 500) => `<text x="13" y="17" text-anchor="middle" font-size="11.5" font-weight="${w}" font-family="var(--mono)" fill="${c}">${n}</text>`;
@@ -502,7 +470,7 @@ function glyph(k, st, n) {
 function renderTimeline() {
   $('phaseList').innerHTML = PH.map(p => {
     const st = phaseState(p.k), locked = st === 'locked';
-    return `<button class="ph ${st}" data-go="${p.k}" ${locked ? 'aria-disabled="true" tabindex="-1"' : ''} ${S.view === p.k ? 'aria-current="page"' : ''} title="${locked ? 'Unlocks when the phase before it is done' : p.name}"><span class="g">${glyph(p.k, st, p.n)}</span><span class="ph-t"><span class="nm">${p.name}</span><span class="sb">${phaseSub(p.k, st)}</span></span></button>${p.n < PH.length ? `<i class="ln ${st === 'done' ? 'done' : ''}"></i>` : ''}`;
+    return `<button class="ph ${st}" data-go="${p.k}" ${locked ? 'aria-disabled="true" tabindex="-1"' : ''} ${S.view === p.k ? 'aria-current="page"' : ''} title="${locked ? 'Unlocks when the phase before it is done' : p.name}"><span class="g">${glyph(p.k, st, p.n)}</span><span class="ph-t"><span class="nm">${p.name}</span></span></button>${p.n < PH.length ? `<i class="ln ${st === 'done' ? 'done' : ''}"></i>` : ''}`;
   }).join('');
   const cur = document.querySelector('.ph[aria-current]');
   $('sel').hidden = !cur;
@@ -511,10 +479,11 @@ function renderTimeline() {
 }
 
 // ------------------------------------------------------------------ views
-function head(p, lede, rest = p.rest) {
-  return `<header class="hd"><div class="kick"><span class="n">Phase ${p.n} of 5</span><i></i><span>${p.who}</span></div><h1>${p.name} <span>${esc(rest)}</span></h1><p class="lede">${lede}</p></header>`;
+function head(p, lede, rest = p.rest, cls = '') {
+  return `<header class="hd ${cls}"><div class="kick"><span class="n">Phase ${p.n} of 5</span><i></i><span>${p.who}</span></div><h1>${p.name} <span>${esc(rest)}</span></h1><p class="lede">${lede}</p></header>`;
 }
 const blank = text => `<div class="card empty">${text}</div>`;
+const disc = (id, title, body) => `<details class="disc" id="${id}" ${S.disc[id] ? 'open' : ''}><summary>${I.chev.replace('class="chev"', '')}${title}</summary>${body}</details>`;
 const size = n => n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
 const ext = name => esc(name.split('.').pop().toUpperCase());
 
@@ -527,10 +496,9 @@ const VIEWS = {
       ? (P?.files || S.files.map(file => ({ file }))).map(f => `<div class="frow"><span class="x">${ext(f.file)}</span><span><b>${esc(f.file)}</b>${f.sheet ? `<small>${esc(f.sheet)} sheet · ${fmt(f.rows)} rows · ${f.columns} columns</small>` : ''}</span></div>`)
       : S.pending.map((f, i) => `<div class="frow"><span class="x">${ext(f.name)}</span><span><b>${esc(f.name)}</b></span><span class="r">${size(f.size)}</span><button class="link" style="margin-left:14px;font-weight:400;font-size:12.5px" data-remove="${i}">Remove</button></div>`);
     return `${head(byK('upload'), started ? 'These are the files this project was built from.' : 'Mix designs, cylinder breaks and QC logs, in whatever layout your plant uses. MixPilot works out the rest.')}
-    ${started ? '' : `<button class="drop ${has ? 'compact' : ''}" id="drop" data-act="pick"><span class="ic">${I.up}</span><b>${has ? 'Add more files' : 'Drop Excel or CSV files here'}</b>${has ? '' : '<span>or click to choose. One workbook or several files, US or metric units.</span>'}</button>`}
+    ${started ? '' : `<button class="drop ${has ? 'compact' : ''}" id="drop" data-act="pick"><span class="ic">${I.up}</span><b>${has ? 'Add more files' : 'Drop Excel or CSV files here'}</b></button>`}
     ${rows.length ? `<div class="card files">${rows.join('')}</div>` : ''}
-    ${has && !started ? `<div class="alt"><button class="btn pri lg" data-act="start" ${S.uploading ? 'disabled' : ''}>${S.uploading ? 'Uploading…' : `Start preparing ${I.arrow}`}</button><span class="muted">About 1.5 minutes</span></div>` : ''}
-    <p class="fine" style="margin-top:28px;max-width:560px">Your files stay on this machine. Muse Spark sees column names, up to 12 sample values per column, and the results our code computes. Full rows aren't sent.</p>`;
+    ${has && !started ? `<div class="alt"><button class="btn pri lg" data-act="start" ${S.uploading ? 'disabled' : ''}>${S.uploading ? 'Uploading…' : `Start preparing ${I.arrow}`}</button><span class="muted">About 1.5 minutes</span></div>` : ''}`;
   },
 
   prepare() {
@@ -550,22 +518,25 @@ const VIEWS = {
     const d = S.art.data;
     if (!d) return `${head(byK('review'), 'Nothing to review in this chat.')}`;
     const open = undecided().length, tested = d.tested || [];
-    const unused = tested.filter(t => t.status === 'not used');
-    const shown = tested.filter(t => t.status === 'added' || (t.status === 'partly logged' && S.decisions[t.column] !== 'skip'));
-    return `${head(byK('review'), open ? `Every number here was measured on your data. ${open > 1 ? `${open} things need` : 'One thing needs'} your decision before training.` : "Every number here was measured on your data. Train when you're happy with what goes in.")}
-    <div class="stats">${[[d.mixes, 'mix designs'], [d.batches, 'batches'], [fmt(d.cylinders_used), `cylinders used, of ${fmt(d.cylinders_read)}`], [d.ages.join(' · '), 'test ages, days']].map(([a, b]) => `<div class="stat"><b>${a}</b><span>${b}</span></div>`).join('')}</div>
-    ${offered().map(decisionStage).join('')}
-    <section class="sec"><div class="sec-h"><h2>What the model will see</h2></div>
-      <div class="inputs">${META_INPUTS.map(x => `<span class="chip">${x}</span>`).join('')}</div>
-      ${shown.length ? `<div class="plus">New from your files</div>
-      <div class="rows">${shown.map(t => `<div class="rw test"><span class="raw" style="font-weight:500">${esc(label(t.column))}</span><span class="tag ${t.status === 'added' ? 'add' : 'you'}">${t.status === 'added' ? 'Added' : 'Your call'}</span><span class="why">${esc(t.why)}</span></div>`).join('')}</div>` : ''}
+    const asking = c => !S.decisions[c.input] || S.editing[c.input];
+    const offer = name => offered().find(c => c.input === name);
+    const shown = tested.filter(t => t.status !== 'not used' && (offer(t.column) ? !asking(offer(t.column)) : t.status === 'added'));
+    const beforeTraining = t => (S.art.prep?.columns?.useful || []).find(x => x.column === t.column)?.why || t.why;
+    const row = t => {
+      const c = offer(t.column), [k, tag] = c ? verdict(c) : ['add', 'Added'];
+      const why = !c ? esc(beforeTraining(t)) : S.decisions[t.column] === 'use' ? "Batches without a value get your plant's median." : 'The model trains without it.';
+      return `<div class="rw test"><span class="raw" style="font-weight:500">${esc(label(t.column))}</span><span class="tag ${k}">${tag}</span><span class="why">${why}${c && S.live === 'review' ? ` <button class="link" data-edit="${esc(c.input)}">Change</button>` : ''}</span></div>`;
+    };
+    return `${head(byK('review'), open ? `${open > 1 ? `${open} things need` : 'One thing needs'} your decision before training.` : "Train when you're happy with what goes in.", undefined, 'tight')}
+    <p class="facts">${d.mixes} mix designs · ${d.batches} batches · ${fmt(d.cylinders_used)} of ${fmt(d.cylinders_read)} cylinders used · tested at ${d.ages.join(', ')} days</p>
+    ${offered().filter(asking).map(decisionStage).join('')}
+    <section class="sec tight"><div class="sec-h"><h2>What the model will see</h2></div>
+      <p class="facts"><b>Meta's 10 inputs:</b> ${META_INPUTS.join(', ')}</p>
+      ${shown.length ? `<div class="plus">New from your files</div><div class="rows">${shown.map(row).join('')}</div>` : ''}
     </section>
-    ${d.output ? `<section class="sec"><div class="sec-h"><h2>Your strength data</h2><p class="muted">One line per mix design, from ${esc(d.output.source.file)}</p></div>
+    ${d.output ? disc('strengthData', 'Your strength data', `<p class="muted" style="font-size:13px;margin:4px 0 10px">One line per mix design, from ${esc(d.output.source.file)}</p>
       <div class="legend" style="margin-bottom:10px"><span><i class="ln-k" style="background:var(--mark-2)"></i>Each mix design</span><span><i class="ln-k" style="background:var(--ink)"></i>Median of your mixes</span></div>
-      <div class="chart">${curves(d)}</div>
-    </section>` : ''}
-    ${unused.length ? `<details class="disc" id="leftOut" ${S.leftOpen ? 'open' : ''}><summary>${I.chev.replace('class="chev"', '')}Columns left out, and why (${unused.length})</summary>
-      <div class="rows" style="margin-top:6px">${unused.map(t => `<div class="rw test"><span class="raw">${esc(label(t.column))}</span><span class="tag no">Not used</span><span class="why">${esc(t.why)}</span></div>`).join('')}</div></details>` : ''}
+      <div class="chart">${curves(d)}</div>`) : ''}
     ${S.live === 'review' && S.canTrain && !S.busy ? `<div class="cta"><div class="t"><b>${open ? 'Ready when you are' : 'Ready to train'}</b>${open ? `${esc(undecided().map(c => label(c.input)).join(' and '))} stay${open > 1 ? '' : 's'} out unless you add ${open > 1 ? 'them' : 'it'}.` : 'Takes 3 to 8 minutes. You can keep browsing while it runs.'}</div><button class="btn pri lg" data-act="train">Train model ${I.arrow}</button></div>` : ''}`;
   },
 
@@ -574,39 +545,30 @@ const VIEWS = {
     if (!T) return `${head(byK('train'), 'Starting…')}`;
     const done = T.status === 'done', n = T.total, cur = Math.min(T.done ?? n, n);
     const group = cur < 1 ? 'a' : cur < 4 ? 'b' : cur < n - 1 ? 'c' : 'd';
-    const shown = done ? T.best_rmse_28d : T.best_so_far?.rmse_28d;
-    const note = S.train.note || (cur < 1 ? "Scoring Meta's settings" : cur < 4 ? 'Trying settings spread across the search space' : cur < n - 1 ? 'BoTorch is picking the next settings to try' : 'Re-checking the best setups on new fold splits');
+    const note = S.train.note || (cur < 1 ? "Scoring Meta's settings" : cur < 4 ? 'Trying settings spread across the search space' : cur < n - 1 ? 'BoTorch is picking the next settings to try' : 'Final test of the best setups, with different mixes held back');
     const search = T.search || [];
     const both = search.some(r => r.plus != null);
     const lede = S.train.failed ? 'Training stopped before it finished. The chat says why, and you can try again.' : done ? `Each setup learned from part of your ${T.model.mixes} mixes and was tested on the rest, so every score comes from mixes that setup never saw.` : 'Every try learns from part of your mixes and is tested on the rest. This step is all code, so no LLM touches these numbers.';
     return `${head(byK('train'), lede)}
     ${S.train.failed ? `<div class="alt" style="margin-top:0;margin-bottom:28px"><button class="btn pri" data-act="train">Try again</button></div>` : ''}
-    <div class="hero-n"><div><div class="big">${shown ? `±${fmt(shown)}<small>psi</small>` : '<span class="muted">–</span>'}</div><div class="big-l">${done ? `28-day prediction error of the saved model${T.typical_28d_psi ? `, about ${pct(T.best_rmse_28d / T.typical_28d_psi)} of a typical ${fmt(T.typical_28d_psi)} psi mix` : ''}` : 'Best 28-day prediction error so far'}</div></div>
-    ${done && T.gain > 0 ? `<div><div class="big">${pct(T.gain)}</div><div class="big-l">more accurate than Meta's default setup, retrained on your data</div></div>` : ''}</div>
     ${done || S.train.failed ? '' : `<div class="rounds"><div class="pills" role="progressbar" aria-valuemin="0" aria-valuemax="${n}" aria-valuenow="${cur}" aria-label="Training rounds">${Array.from({ length: n }, (_, i) => `<i class="${i < cur ? 'on' : i === cur ? 'cur' : ''}" ${i === cur ? `style="${sync(1100)}"` : ''}></i>`).join('')}</div>
-      <div class="pill-k"><span class="${group === 'a' ? 'act' : ''}" style="left:0">Meta's</span><span class="${group === 'b' ? 'act' : ''}" style="left:${100 / (n - 1)}%">Exploring</span><span class="${group === 'c' ? 'act' : ''}" style="left:${400 / (n - 1)}%">Searching where it looks promising</span><span class="${group === 'd' ? 'act' : ''}" style="right:0">Re-check</span></div>
+      <div class="pill-k"><span class="${group === 'a' ? 'act' : ''}" style="left:0">Meta's</span><span class="${group === 'b' ? 'act' : ''}" style="left:${100 / (n - 1)}%">Exploring</span><span class="${group === 'c' ? 'act' : ''}" style="left:${400 / (n - 1)}%">Searching where it looks promising</span><span class="${group === 'd' ? 'act' : ''}" style="right:0">Final test</span></div>
       <div class="now-line">${dots()}${esc(note)}</div></div>`}
-    ${search.length ? `<section class="sec"><div class="sec-h"><h2>${done ? 'What the search found' : 'The search so far'}</h2><p class="muted">${done ? 'Search scores, in psi. The re-check below decides' : "28-day error of each round's try, in psi"}</p></div>
+    ${search.length && !done ? `<section class="sec"><div class="sec-h"><h2>The search so far</h2><p class="muted">28-day error of each round's try, in psi</p></div>
       ${both ? `<div class="legend" style="margin-bottom:10px"><span><i class="ink"></i>With your new inputs</span><span><i></i>Meta's 10 inputs only</span></div>` : ''}
       <div class="chart">${searchChart(search, n)}</div></section>` : ''}
-    ${done ? `<section class="sec"><div class="sec-h"><h2>The ${T.rows.length} setups, re-checked</h2><p class="muted">On fold splits the search never used</p></div>
+    ${done ? `<section class="sec"><div class="sec-h"><h2>Best models</h2><p class="muted">${T.rows.length + (T.others?.length || 0)} models trained. These ${T.rows.length} reached the final test, ranked best to worst.</p></div>
       <div class="card board">${boardRows(T)}</div>
-      <p class="fine" style="margin-top:12px;max-width:640px">${T.tuning_helped ? 'Re-tuning improved the final model, so it keeps the tuned settings.' : "Re-tuning didn't improve the final model, so it keeps Meta's settings."}${T.left_out?.length ? ` Training tested ${esc(T.left_out.map(label).join(', '))} and left ${T.left_out.length > 1 ? "them out, because they didn't help" : "it out, because it didn't help"}.` : ''} Saved as model ${esc(T.model.version)}.${T.reused ? ' These numbers come from an earlier identical run on the same data.' : ''} psi is pounds per square inch, the US unit of concrete strength.</p></section>` : ''}`;
+      <p class="fine" style="margin-top:12px;max-width:640px">${T.tuning_helped ? 'Re-tuning improved the final model, so it keeps the tuned settings.' : "Re-tuning didn't improve the final model, so it keeps Meta's settings."}${T.left_out?.length ? ` Training tested ${esc(T.left_out.map(label).join(', '))} and left ${T.left_out.length > 1 ? "them out, because they didn't help" : "it out, because it didn't help"}.` : ''} Saved as model ${esc(T.model.version)}.${T.reused ? ' These numbers come from an earlier identical run on the same data.' : ''} psi is pounds per square inch, the US unit of concrete strength.${T.rows.some(r => !r.chosen && r.rmse_28d < T.best_rmse_28d && (!r.folds_vs_meta || mostFolds(r.folds_vs_meta))) ? ' The best model is picked on all test ages and on how many folds it wins, so another row can be slightly ahead at 28 days alone.' : ''}</p>${allTries(T)}</section>` : ''}`;
   },
 
   results() {
-    const r = S.art.results, T = S.art.training;
+    const r = S.art.results;
     if (!r) return `${head(byK('results'), 'Results appear here when training finishes.')}`;
-    const p = r.proposals[S.sel] || r.proposals[0], best = bestSaving();
-    const stats = [
-      T?.gain > 0 ? [pct(T.gain), "more accurate 28-day predictions than Meta's default setup, retrained on your data"] : null,
-      best ? [pct(best), 'less CO₂ at the same predicted 28-day strength, in the best mix'] : null,
-      T ? [`±${fmt(T.best_rmse_28d)} psi`, `28-day prediction error${T.typical_28d_psi ? `, about ${pct(T.best_rmse_28d / T.typical_28d_psi)} of a typical ${fmt(T.typical_28d_psi)} psi mix` : ''}`] : null,
-    ].filter(Boolean);
+    const p = r.proposals[S.sel] || r.proposals[0];
     return `${head(byK('results'), p ? 'Model trained on your plant, with mixes to take to the lab next.' : 'The model found no lower-CO₂ mix it is confident about yet.', `for model ${r.model}`)}
     <div class="chart bleed">${scatter(r, p)}</div>
     <div class="legend" style="margin-top:6px"><span><i></i>Your ${r.compared_with} mixes</span>${p ? `<span><i class="pr"></i>Proposed</span><span><i class="ink"></i>Mix it replaces</span>` : ''}</div>
-    ${stats.length ? `<div class="pay">${stats.map(([a, b]) => `<div class="stat"><b>${a}</b><span>${b}</span></div>`).join('')}</div>` : ''}
     ${p ? `<section class="sec"><div class="sec-h"><h2>Mixes to test next</h2></div>
       <div class="seg">${r.proposals.map((q, i) => `<button class="${q === p ? 'on' : ''}" data-sel="${i}" aria-pressed="${q === p}"><b><i></i>${esc(q.id)}<em>−${pct(q.co2_saving)} CO₂</em></b><small>Replaces ${esc(q.replaces)}</small></button>`).join('')}</div>
     </section>
@@ -640,15 +602,16 @@ const STEPS = [
         ${Object.entries(P.dropped || {}).map(([why, n]) => `<div class="rw"><span>${esc(droppedWhy(why))}</span><span>−${n}</span></div>`).join('')}
         <div class="rw tot"><span>Used for training</span><span>${fmt(P.cylinders_used)}</span></div></div>
       <div><ul class="notes">${issues.map(i => `<li class="${i.level === 'warning' ? 'warn' : ''}">${esc(i.message)}</li>`).join('')}</ul></div></div>`; } },
-  { t: 'Test every other column', short: 'Testing the columns', who: 'Our code, on your data',
-    sum: () => { const t = S.art.data?.tested || [], n = s => t.filter(x => x.status === s).length; return [n('added') ? `${n('added')} added` : '', n('partly logged') ? `${n('partly logged')} your call` : '', n('not used') ? `${n('not used')} not used` : ''].filter(Boolean).join(' · '); },
+  { t: 'Sort the columns', short: 'Sorting the columns', who: 'Muse Spark explains them, our code measures them',
+    sum: () => { const c = S.art.prep?.columns; return c ? [c.useful.length ? `${c.useful.length} could be useful` : '', c.unused.length ? `${c.unused.length} not used` : ''].filter(Boolean).join(' · ') : ''; },
     body: () => {
-      const tested = S.prep.tested ? S.art.data?.tested : null;
-      if (!tested) return `<div class="rows">${(S.art.prep?.candidates || []).map(c => `<div class="rw test pending"><span class="raw">${esc(label(c))}</span>${dots()}<span></span></div>`).join('')}</div>`;
-      return `<div class="rows">${tested.map(t => {
-        const k = t.status === 'added' ? ['add', 'Added'] : t.status === 'partly logged' ? ['you', 'Your call'] : ['no', 'Not used'];
-        return `<div class="rw test"><span class="raw" style="font-weight:${t.status === 'not used' ? 400 : 500}">${esc(label(t.column))}</span><span class="tag ${k[0]}">${k[1]}</span><span class="why">${esc(t.why)}</span></div>`;
-      }).join('')}</div>`;
+      const c = S.prep.tested ? S.art.prep?.columns : null;
+      if (!c) return `<div class="rows">${(S.art.prep?.candidates || []).map(n => `<div class="rw test pending"><span class="raw">${esc(label(n))}</span>${dots()}<span></span></div>`).join('')}</div>`;
+      const rows = (title, list) => list.length ? `<div class="plus">${title} (${list.length})</div><div class="rows">${list.map(r => `<div class="rw col"><span class="raw" style="font-weight:500" title="${esc(r.column)}">${esc(r.column)}</span><span class="why">${r.note ? `${esc(r.note)} ` : ''}<span class="muted">${esc(r.why)}</span></span></div>`).join('')}</div>` : '';
+      return `<div class="plus" style="margin-top:0">BOxCrete's default inputs</div>
+        <div class="rows cols-2">${c.default.map(r => `<div class="rw def"><span class="raw">${esc(r.column)}</span><span class="arr">${I.arrow}</span><span>${esc(r.field)}</span></div>`).join('')}</div>
+        ${S.art.prep.assumptions?.some(a => /material source/.test(a)) ? `<p class="fine" style="margin-top:6px">Material source has no column here: all your mixes count as ready-mix concrete.</p>` : ''}
+        ${rows('Could be useful', c.useful)}${rows('Not used', c.unused)}`;
     } },
 ];
 // "Tech Notes contains 'cap failure'" reads better as what happened to the cylinder
@@ -663,19 +626,13 @@ function droppedWhy(why) {
 const verdict = c => S.decisions[c.input] === 'use' ? ['add', 'In the model'] : ['no', 'Left out'];
 function decisionStage(c) {
   const name = esc(label(c.input));
-  if (S.decisions[c.input] && !S.editing[c.input]) {
-    const [k, t] = verdict(c), use = S.decisions[c.input] === 'use';
-    return `<div class="decide settled"><div class="decide-row"><span class="tag ${k}">${t}</span><span><b>${name}.</b> ${use ? "Batches without a value get your plant's median." : 'The model trains without it.'}</span>${S.live === 'review' ? `<button class="link" style="margin-left:auto" data-edit="${esc(c.input)}">Change</button>` : ''}</div></div>`;
-  }
   const missing = c.mixes - c.mixes_with_value, since = c.recorded_from ? day(c.recorded_from) : null, tl = c.timeline;
   const first = tl ? tl.findIndex(b => b.has) : -1;
-  return `<div class="decide"><div class="decide-top"><span class="tag you">Your call</span></div>
-    <h2>Use ${name} in training?</h2>
-    <p>${esc(c.why)} ${since ? `Your plant only started logging it on ${since}.` : `Only ${c.mixes_with_value} of ${c.mixes} batches have it.`}</p>
+  return `<div class="decide"><div class="decide-top"><span class="tag you">Your call</span><h2>Use ${name} in training?</h2><span class="decide-b"><button class="btn pri sm" data-decide="use" data-input="${esc(c.input)}">Use it in training</button><button class="btn sec-b sm" data-decide="skip" data-input="${esc(c.input)}">Leave it out</button></span></div>
+    <p>Only ${c.mixes_with_value} of ${c.mixes} batches have it, and the other ${missing} would get your plant's median. ${esc(c.why)}</p>
     ${tl ? `<div class="strip" role="img" aria-label="${c.mixes_with_value} of ${c.mixes} batches have ${name}">${tl.map(b => `<i class="${b.has ? 'has' : ''}" data-tip="${day(b.date)}\n${b.has ? 'Logged' : 'Not logged'}"></i>`).join('')}</div>
     <div class="strip-k"><span>${day(tl[0].date, { month: 'short', day: 'numeric' })}</span>${since && first > 0 ? `<em style="left:${first / tl.length * 100}%">Logged since ${since}</em>` : ''}<span>${day(tl[tl.length - 1].date, { month: 'short', day: 'numeric' })}</span></div>`
       : `<div class="strip"><i class="has" style="flex:${c.mixes_with_value}"></i><i style="flex:${missing}"></i></div>`}
-    <div class="decide-ft"><button class="btn pri" data-decide="use" data-input="${esc(c.input)}">Use it in training</button><button class="btn sec-b" data-decide="skip" data-input="${esc(c.input)}">Leave it out</button><span class="mt">${c.mixes_with_value} of ${c.mixes} batches have it.<br>The other ${missing} would get your plant's median.</span></div>
   </div>`;
 }
 function renderChatCards() {
@@ -743,13 +700,21 @@ function searchChart(search, total) {
   search.forEach(s => g += `<rect class="hit" x="${X(s.round) - bw / 2}" y="${m.t}" width="${bw}" height="${H - m.t - m.b}" data-tip="Round ${s.round}: ${esc(s.kind)}${s.plus != null ? `\nWith new inputs: ${fmt(s.plus)} psi` : ''}${s.base != null ? `\nMeta's 10 inputs: ${fmt(s.base)} psi` : ''}"/>`);
   return g + '</svg>';
 }
+const mostFolds = f => { const [won, all] = f.split('/').map(Number); return won * 2 > all; };
 function boardRows(T) {
   const max = Math.max(...T.rows.map(r => r.rmse_28d));
   const folds = f => f?.replace('/', ' of ');
-  return T.rows.map(r => {
-    const note = r.baseline ? 'Baseline' : r.chosen ? `Best. Beat the baseline on ${folds(r.folds)} folds` : r.folds_vs_meta ? `Beat Meta's settings on ${folds(r.folds_vs_meta)} folds` : `Beat the baseline on ${folds(r.folds)} folds`;
+  return T.rows.slice().sort((a, b) => !!b.chosen - !!a.chosen || a.rmse_28d - b.rmse_28d).map(r => {
+    const note = r.baseline ? 'Baseline' : r.chosen ? `Best. Beat the baseline on ${folds(r.folds)} folds` : r.folds_vs_meta ? (mostFolds(r.folds_vs_meta) ? `Beat Meta's settings on ${folds(r.folds_vs_meta)} folds` : `Beat Meta's settings on only ${folds(r.folds_vs_meta)} folds, so it wasn't picked`) : `Beat the baseline on ${folds(r.folds)} folds`;
     return `<div class="brow ${r.chosen ? 'win' : ''}"><div class="nm">${esc(r.row)}<small>${note}</small></div><div class="v">${fmt(r.rmse_28d)} psi</div><div class="bar"><i style="width:${r.rmse_28d / max * 100}%"></i></div></div>`;
   }).join('');
+}
+function allTries(T) {
+  const others = T.others || [];
+  if (!others.length) return '';
+  const settings = o => Object.entries(o.settings).map(([k, v]) => `${esc(k)} ${v}`).join(' · ');
+  return disc('allTries', `The other ${others.length} models`, `<p class="fine" style="margin:6px 0 10px;max-width:640px">The same BOxCrete model with other inputs or settings. These didn't reach the final test. Ranked best to worst.</p>
+    <div class="card board">${others.map(o => `<div class="brow other"><div class="nm">Model ${o.model}, ${o.new_inputs ? 'your new inputs' : "Meta's 10 inputs"}<small>${settings(o)}</small></div></div>`).join('')}</div>`);
 }
 function scatter(r, sel) {
   const { w, left } = content(), W = w + left, H = Math.max(340, Math.min(500, $('stage').clientHeight - 270)), m = { l: left + 44, r: 20, t: 30, b: 44 };
@@ -784,7 +749,6 @@ function compare(r, p) {
   r.kept.forEach(e => rows.push(row(`${label(e)} (kept)`, num(t.extras?.[e]), num(p.extras[e]))));
   return `<table class="cmp"><thead><tr><th scope="col"></th><th scope="col">${esc(p.replaces)} today</th><th scope="col">${esc(p.id)} proposed</th></tr></thead><tbody>${rows.join('')}</tbody></table>`;
 }
-const bestSaving = () => { const r = S.art.results; return r?.proposals.length ? Math.max(...r.proposals.map(p => p.co2_saving)) : 0; };
 
 // ------------------------------------------------------------------ rendering
 let lastHtml = '', queued = false;
@@ -1126,7 +1090,7 @@ document.addEventListener('click', async e => {
     if (a === 'train') startTraining();
   }
 });
-document.addEventListener('toggle', e => { if (e.target.id === 'leftOut') S.leftOpen = e.target.open; }, true);
+document.addEventListener('toggle', e => { if (e.target.matches?.('details.disc')) S.disc[e.target.id] = e.target.open; }, true);
 $('attach').addEventListener('click', () => $('picker').click());
 $('picker').addEventListener('change', e => { addFiles([...e.target.files]); e.target.value = ''; });
 function bindDrop() {

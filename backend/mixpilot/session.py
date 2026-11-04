@@ -34,6 +34,7 @@ class Session:
     suggestions: dict | None = None
     accepted: list[str] = field(default_factory=list)  # extra inputs used for training
     offered: dict[str, dict] = field(default_factory=dict)  # partly logged inputs the user can switch on
+    column_notes: dict[str, str] = field(default_factory=dict)  # the agent's word on each column it didn't map
     ready_to_train: bool = False  # prepared data that has not been trained on yet
     training: dict | None = None
     model_meta: dict | None = None

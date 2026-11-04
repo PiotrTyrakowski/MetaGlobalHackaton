@@ -12,6 +12,12 @@ from mixpilot.agent import Call, Step
 from mixpilot.session import BACKEND
 
 DEMO_MAPPING = json.loads((BACKEND / "demo_data" / "mapping.json").read_text())
+DEMO_NOTES = {
+    "Air (%)": "Air measured in the fresh concrete. More air usually means lower strength.",
+    "Silica Fume (lb/cy)": "A binder that raises strength.",
+    "Mill Cert 28d (psi)": "The cement maker's own strength test for that lot, so it tracks cement quality.",
+    "daily_QC.xlsx / QC Log / Truck": "Which truck delivered the batch.",  # named the way read_files names it
+}
 
 
 class ScriptedLLM:
@@ -29,7 +35,7 @@ class ScriptedLLM:
             if item.get("type") == "function_call_output":
                 self.results[names.get(item["call_id"], "?")] = json.loads(item["output"])
             elif item.get("role") == "user" and item["content"].startswith("[app] The user uploaded"):
-                self.plan = [self._call("read_files"), self._call("map_columns", mapping=DEMO_MAPPING),
+                self.plan = [self._call("read_files"), self._call("map_columns", mapping=DEMO_MAPPING, column_notes=DEMO_NOTES),
                              self._call("validate_data"), self._call("suggest_inputs")]
         if self.plan:
             self._last = [self.plan.pop(0)]

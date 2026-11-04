@@ -123,6 +123,14 @@ def test_prep_turn_adds_two_inputs_and_offers_the_partly_logged_one(monkeypatch)
     assert all(len(c["points"]) == 3 for c in data["output"]["curves"])
 
     prep = s.artifacts["prep"]
+    columns = {group: {r["column"]: r for r in rows} for group, rows in prep["columns"].items()}
+    assert "Air (%)" in columns["useful"] and "Air" in columns["useful"]["Air (%)"]["note"]
+    assert "Explains" in columns["useful"]["Air (%)"]["why"]
+    assert "No clear link" in columns["unused"]["Truck"]["why"] and columns["unused"]["Truck"]["note"]
+    assert "links the files" in columns["unused"]["Ticket #"]["why"]
+    assert "Strength (psi)" in columns["default"] and "Strength (psi)" not in columns["unused"]
+    every = {str(c) for sheet in s.sheets for c in sheet.df.columns}
+    assert every <= set(columns["default"]) | set(columns["useful"]) | set(columns["unused"])
     assert [f["file"] for f in prep["files"]] == [f.name for f in files] and prep["joins"]
     fields = {r["field"]: r for r in prep["mapped"]}
     assert fields["Cement"]["change"] == "lb/yd³ → kg/m³" and fields["Curing temperature"]["change"] == "°F → °C"
@@ -175,6 +183,8 @@ def test_training_tests_the_ingredient_first_and_leaves_it_out_if_it_doesnt_help
     assert s.accepted == ["Air (%)", "Mill Cert 28d (psi)"]
     assert s.artifacts["training"]["left_out"] == ["Silica Fume (lb/cy)"]
     assert {r["column"]: r for r in s.artifacts["data"]["tested"]}["Silica Fume (lb/cy)"]["status"] == "not used"
+    useful = {r["column"]: r for r in s.artifacts["prep"]["columns"]["useful"]}  # as it read before training
+    assert "Training tests" in useful["Silica Fume (lb/cy)"]["why"]
     shutil.rmtree(s.dir)
 
 
@@ -194,11 +204,22 @@ def test_an_ingredient_that_helps_stays_and_says_how_much(monkeypatch, tmp_path)
 
 
 def test_the_search_shows_both_input_sets_round_by_round():
-    trials = [dict(setup="Meta's 10 inputs", source="meta default", error_28d_psi=730),
-              dict(setup="+ air", source="meta default", error_28d_psi=297),
-              dict(setup="Meta's 10 inputs", source="sobol", error_28d_psi=None),
-              dict(setup="+ air", source="sobol", error_28d_psi=293)]
-    assert tools._search(trials) == [dict(round=1, kind="Meta's settings", base=730, plus=297),
-                                     dict(round=2, kind="Exploring", base=None, plus=293)]
-    alone = tools._search([dict(setup="Meta's 10 inputs", source="bayes-opt", error_28d_psi=700)])
-    assert alone == [dict(round=1, kind="Searching", base=700, plus=None)]
+    assert tools._search_round(1, "meta default", 730.2, 297) == dict(round=1, kind="Meta's settings", base=730, plus=297)
+    assert tools._search_round(2, "sobol", float("inf"), 293) == dict(round=2, kind="Exploring", base=None, plus=293)
+    assert tools._search_round(1, "bayes-opt", 700, None) == dict(round=1, kind="Searching", base=700, plus=None)
+
+
+def test_the_models_that_missed_the_final_test_are_told_apart_and_ranked():
+    trials = [dict(setup="Meta's 10 inputs", noise=1.0, error_28d_psi=730),
+              dict(setup="+ air", noise=1.0, error_28d_psi=297),
+              dict(setup="Meta's 10 inputs", noise=2.0, error_28d_psi=None),
+              dict(setup="+ air", noise=2.0, error_28d_psi=293),
+              dict(setup="Meta's 10 inputs", noise=3.0, error_28d_psi=700),
+              dict(setup="+ air", noise=3.0, error_28d_psi=290),
+              dict(setup="+ air", noise=3.0, error_28d_psi=290)]
+    # noise=1 with air is another model than Meta's row, and the search landing on noise=3 twice is one model
+    board = [dict(inputs=[], settings=dict(noise=1.0)), dict(inputs=["air"], settings=dict(noise=2.0))]
+    assert tools._others(trials, board) == [
+        dict(model=6, new_inputs=True, settings=dict(noise=3.0)),
+        dict(model=2, new_inputs=True, settings=dict(noise=1.0)),
+        dict(model=5, new_inputs=False, settings=dict(noise=3.0))]
