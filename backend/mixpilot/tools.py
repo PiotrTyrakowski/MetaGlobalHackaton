@@ -187,7 +187,7 @@ def _factor(unit: str) -> float:
 
 def _run_key(ds: Dataset, inputs: list[str], n_bayes: int) -> str:
     h = hashlib.sha256()
-    h.update(ds.rows.to_csv(index=False).encode())
+    h.update(ds.rows[sorted(ds.rows.columns)].to_csv(index=False).encode())  # same data, whatever the mapping's order
     for c in sorted(inputs):
         h.update(c.encode())
         h.update(ds.feature(c).to_csv().encode())

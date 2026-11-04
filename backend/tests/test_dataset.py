@@ -95,3 +95,13 @@ def test_join_keys_see_through_id_spelling():
     keys = excel.join_keys([sheet("a.xlsx", Mix=[f"R-{i}" for i in range(6)], Day=list(range(6))),
                             sheet("b.xlsx", Code=[f"r {i}" for i in range(6)])])
     assert any(k["a"] == "a.xlsx:Mix" and k["b"] == "b.xlsx:Code" for k in keys)
+
+
+def test_the_automl_cache_ignores_the_order_of_the_mapping():
+    from mixpilot import tools
+
+    ds, _ = dataset.build(demo_sheets(), MAPPING)
+    shuffled = json.loads(json.dumps(MAPPING))
+    shuffled["recipes"]["fields"] = dict(reversed(list(shuffled["recipes"]["fields"].items())))
+    other, _ = dataset.build(demo_sheets(), shuffled)
+    assert tools._run_key(ds, ["Air (%)"], 10) == tools._run_key(other, ["Air (%)"], 10)
